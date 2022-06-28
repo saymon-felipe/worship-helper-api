@@ -1,0 +1,29 @@
+{
+  "name": "worship-helper-api",
+  "version": "1.0.0",
+  "description": "Api do aplicativo worship helper",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/saymon-felipe/worship-helper-api.git"
+  },
+  "author": "Saymon Felipe",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/saymon-felipe/worship-helper-api/issues"
+  },
+  "homepage": "https://github.com/saymon-felipe/worship-helper-api#readme",
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "body-parser": "^1.20.0",
+    "express": "^4.18.1",
+    "jsonwebtoken": "^8.5.1",
+    "morgan": "^1.10.0",
+    "mysql": "^2.18.1",
+    "nodemon": "^2.0.18"
+  }
+}
