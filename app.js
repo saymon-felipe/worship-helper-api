@@ -4,6 +4,7 @@ const morgan = require('morgan');
 const bodyParser = require('body-parser');
 
 const rotaUsuarios = require('./routes/usuario');
+const rotaIgreja = require('./routes/church');
 
 app.use(morgan('dev'));
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -25,6 +26,8 @@ app.use((req, res, next) => {
 })
 
 app.use('/usuario', rotaUsuarios);
+app.use('/igreja', rotaIgreja);
+app.use('/public', express.static('public'));
 
 app.use((req, res, next) => {
     const error = new Error("Não encontrado");
