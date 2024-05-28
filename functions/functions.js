@@ -19,6 +19,18 @@ let functions = {
             })
         })
     },
+    createResponse: function (message, returnObj, request_type, request_status) {
+        let response = {
+            message: message,
+            returnObj: returnObj,
+            request: {
+                type: request_type.toUpperCase(),
+                status: request_status
+            }
+        }
+
+        return response;
+    },
     executeSQL: function (queryText, params = []) {
         return new Promise((resolve, reject) => {
             mysql.getConnection((error, conn) => {
@@ -152,46 +164,6 @@ let functions = {
                 reject(error);
             })
         })
-    },
-    checkPermission: function (id_usuario, id_igreja) {
-        return new Promise((resolve, reject) => {
-            this.executeSQL(`
-                SELECT
-                    CASE
-                        WHEN ? = usuario_administrador THEN true
-                    ELSE
-                        false
-                    END as administrador
-                FROM
-                    igreja
-                WHERE
-                    id_igreja = ?`,
-                [id_usuario, id_igreja])
-            .then((results) => {
-                if (results.length <= 0 || results[0].administrador == 0) {
-                    const error = {
-                        message: "Você não tem permissão para acessar essa igreja",
-                        request: {
-                            type: "POST",
-                            status: 401
-                        }
-                    }
-                    reject(error);
-                }
-                const response = {
-                    message: "Acesso permitido à igreja de id " + id_igreja,
-                    request: {
-                        type: "POST",
-                        status: 200
-                    }
-                }
-                resolve(response);
-            })
-            .catch((error) => {
-                reject(error);
-            })
-        })
-        
     }
 }
 
