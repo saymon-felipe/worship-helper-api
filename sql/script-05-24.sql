@@ -1,5 +1,21 @@
+
 CREATE DATABASE  IF NOT EXISTS `worship_helper` /*!40100 DEFAULT CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci */;
 USE `worship_helper`;
+
+DROP TABLE IF EXISTS `usuario`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `usuario` (
+  `id_usuario` int(11) NOT NULL AUTO_INCREMENT,
+  `nome_usuario` varchar(50) NOT NULL,
+  `email_usuario` varchar(100) NOT NULL,
+  `senha_usuario` varchar(500) NOT NULL,
+  `descricao_usuario` varchar(50) NOT NULL,
+  `app_owner` int(11) NOT NULL DEFAULT 0,
+  `imagem_usuario` varchar(500) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id_usuario`),
+  UNIQUE KEY `email_usuario` (`email_usuario`)
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
 
 --
 -- Table structure for table `avisos_igreja`
@@ -87,6 +103,20 @@ CREATE TABLE `igreja` (
 ) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+
+DROP TABLE IF EXISTS `tags_igreja`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `tags_igreja` (
+  `id_tag` int(11) NOT NULL AUTO_INCREMENT,
+  `tags_id_igreja` int(11) NOT NULL,
+  `nome_tag` varchar(50) NOT NULL,
+  `tipo_tag` varchar(50) NOT NULL,
+  PRIMARY KEY (`id_tag`),
+  KEY `id_igreja_idx` (`tags_id_igreja`),
+  CONSTRAINT `tags_id_igreja` FOREIGN KEY (`tags_id_igreja`) REFERENCES `igreja` (`id_igreja`) ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 --
 -- Table structure for table `lista_tags_musicas`
 --
@@ -211,19 +241,7 @@ CREATE TABLE `tags_de_musicas` (
 -- Table structure for table `tags_igreja`
 --
 
-DROP TABLE IF EXISTS `tags_igreja`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `tags_igreja` (
-  `id_tag` int(11) NOT NULL AUTO_INCREMENT,
-  `tags_id_igreja` int(11) NOT NULL,
-  `nome_tag` varchar(50) NOT NULL,
-  `tipo_tag` varchar(50) NOT NULL,
-  PRIMARY KEY (`id_tag`),
-  KEY `id_igreja_idx` (`tags_id_igreja`),
-  CONSTRAINT `tags_id_igreja` FOREIGN KEY (`tags_id_igreja`) REFERENCES `igreja` (`id_igreja`) ON DELETE NO ACTION ON UPDATE NO ACTION
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
+
 
 --
 -- Table structure for table `tags_usuario`
@@ -251,20 +269,7 @@ CREATE TABLE `tags_usuario` (
 -- Table structure for table `usuario`
 --
 
-DROP TABLE IF EXISTS `usuario`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `usuario` (
-  `id_usuario` int(11) NOT NULL AUTO_INCREMENT,
-  `nome_usuario` varchar(50) NOT NULL,
-  `email_usuario` varchar(100) NOT NULL,
-  `senha_usuario` varchar(500) NOT NULL,
-  `descricao_usuario` varchar(50) NOT NULL,
-  `app_owner` int(11) NOT NULL DEFAULT 0,
-  `imagem_usuario` varchar(500) NOT NULL DEFAULT '',
-  PRIMARY KEY (`id_usuario`),
-  UNIQUE KEY `email_usuario` (`email_usuario`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+
 
 create table versaodb (
 	id int not null primary key auto_increment,
