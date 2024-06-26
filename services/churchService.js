@@ -24,7 +24,7 @@ let churchService = {
                 ON usuario.id_usuario = igreja.usuario_administrador`, [])
             .then((results) => {
                 if (results.length == 0) {
-                    resolve("Nenhuma igreja cadastrada");
+                    reject("Nenhuma igreja cadastrada");
                 }
 
                 let lista_igrejas = results.map(igreja => {

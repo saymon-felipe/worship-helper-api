@@ -384,7 +384,11 @@ let usuarioService = {
                 AND 
                     id_funcoes_igreja_id_igreja = ?
             `, [user_id, company_id])
-            .then((results) => {
+            .then(() => {
+                if (new_functions.length == 0) {
+                    resolve();
+                }
+
                 for (let i = 0; i < new_functions.length; i++) {
                     functions.executeSQL(`
                         INSERT INTO
@@ -393,7 +397,7 @@ let usuarioService = {
                         VALUES
                             (?, ?, ?)
                     `, [company_id, user_id, new_functions[i]])
-                    .then((results2) => {
+                    .then(() => {
                         if (i == new_functions.length - 1) {
                             resolve();
                         }

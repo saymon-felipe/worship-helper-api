@@ -21,14 +21,14 @@ router.get("/listar-igrejas", login, (req, res, next) => {
 
 router.post("/criar-tag", login, (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
-        _churchService.createTag(req.body.id_igreja, req.body.new_tag).then(() => {
+        _churchService.createTag(req.body.id_igreja, req.body.nome).then(() => {
             let response = functions.createResponse("Tag criada com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
         })
     }).catch((error) => {
-        reject(error);
+        return res.status(500).send(error);
     })
 })
 
@@ -56,7 +56,7 @@ router.post("/retorna-tags", login, (req, res, next) => {
 
 router.post("/criar-funcao", login, (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
-        _churchService.createFunction(req.body.id_igreja, req.body.new_function).then(() => {
+        _churchService.createFunction(req.body.id_igreja, req.body.nome).then(() => {
             let response = functions.createResponse("Função criada com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
