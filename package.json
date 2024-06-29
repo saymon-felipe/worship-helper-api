@@ -32,7 +32,8 @@
     "multer-s3": "^2.10.0",
     "mysql": "^2.18.1",
     "nodemon": "^2.0.18",
-    "puppeteer": "^22.12.1"
+    "puppeteer": "^22.12.1",
+    "puppeteer-core": "^12.0.0"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/abort-controller": {
