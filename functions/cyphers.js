@@ -5,7 +5,9 @@ let cyphers = {
         return new Promise(async (resolve, reject) => {
             try {
                 let url = `https://www.cifraclub.com.br/?q=${query.toLowerCase().split(" ").join("+")}`;
-                const browser = await puppeteer.launch();
+                const browser = await puppeteer.launch({
+                    args: ['--no-sandbox']
+                });
                 const page = await browser.newPage();
 
                 await page.goto(url);
