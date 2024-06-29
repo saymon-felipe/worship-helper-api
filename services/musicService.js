@@ -26,20 +26,28 @@ let musicService = {
                     videoId: item.id.videoId,
                     publishedAt: item.snippet.publishedAt,
                     url: "https://youtube.com/watch?v=" + item.id.videoId,
-                    videoThumbnail: item.snippet.thumbnails.url
+                    videoThumbnail: item.snippet.thumbnails.default.url
                 }));
-              
+
                 resolve(videos);
             })
         })
     },
-    createMusic: function (name, artist, url) {
+    createMusic: function (name, artist, video_url, cipher_url, thumbnail) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(
                 `
-                    
-                `
-            )
+                    INSERT INTO
+                        musicas
+                        (nome_musica, artista_musica, video_url, cifra_url, imagem)
+                    VALUES
+                        (?, ?, ?, ?, ?)
+                `, [name, artist, video_url, cipher_url, thumbnail]
+            ).then(() => {
+                resolve();
+            }).catch((error) => {
+                reject(error);
+            })
         })
     }
 }
