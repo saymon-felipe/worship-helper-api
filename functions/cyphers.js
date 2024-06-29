@@ -6,7 +6,6 @@ let cyphers = {
             try {
                 let url = `https://www.cifraclub.com.br/?q=${query.toLowerCase().split(" ").join("+")}`;
                 const browser = await puppeteer.launch({
-                    executablePath: '/app/.apt/usr/bin/google-chrome',
                     args: ['--no-sandbox', '--disable-setuid-sandbox']
                 });
                 const page = await browser.newPage();
