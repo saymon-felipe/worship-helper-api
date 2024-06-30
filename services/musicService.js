@@ -49,6 +49,36 @@ let musicService = {
                 reject(error);
             })
         })
+    },
+    returnMusics: function () {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        m.*
+                    FROM
+                        musicas m
+                `
+            ).then((results) => {
+                let musicList = results.map(music => {
+                    return {
+                        id: music.id_musica,
+                        name: music.nome_musica,
+                        artist: music.artista_musica,
+                        video_url: music.video_url,
+                        cipher_url: music.cifra_url,
+                        image: music.imagem,
+                        video_id: music.video_id
+                    }
+                })
+
+                musicList["tags"] = [];
+
+                resolve(musicList);
+            }).catch((error) => {
+                reject(error);
+            })
+        })
     }
 }
 

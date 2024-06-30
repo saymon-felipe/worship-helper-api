@@ -65,6 +65,8 @@ let functions = {
                 WHERE
                     m.tipo_metadado = "membro"
                 AND
+                    m.confirmacao = 1
+                AND
                     m.metadados_id_igreja = ?`,
                 [id_igreja])
             .then((results) => { 

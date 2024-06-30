@@ -42,7 +42,15 @@ router.post("/", login, (req, res, next) => {
         let response = functions.createResponse("Música cadastrada com sucesso no banco de dados", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
+        return res.status(500).send(error);
+    })
+})
+
+router.get("/", login, (req, res, next) => {
+    _musicService.returnMusics().then((results) => {
+        let response = functions.createResponse("Retorno de todas as músicas", results, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
         return res.status(500).send(error);
     })
 })
