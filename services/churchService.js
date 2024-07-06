@@ -433,10 +433,7 @@ let churchService = {
                     (?, ?, ?)
             `, [company_name, administrator_id, church_image])
             .then((results) => {
-                functions.insertMetadata("membro", "CURRENT_TIMESTAMP()", "membro", results.insertId, administrator_id, 0, 1).then()
-                .catch((error2) => {
-                    reject(error2);
-                })
+                this.addMember(results.insertId, administrator_id);
 
                 let igreja_cadastrada = {
                     id_igreja: results.insertId,
