@@ -1,24 +1,6 @@
 let mysql = require("../mysql.js").pool;
 
 let functions = {
-    insertMetadata: function (tipo_metadado, data_confirmacao = "", nome_metadado, id_igreja, id_usuario, id_objeto = 0, confirmacao = 0) {
-        return new Promise((resolve, reject) => {
-            this.executeSQL(`
-                INSERT INTO 
-                    metadados
-                    (tipo_metadado, data_criacao, data_confirmacao, nome_metadado, metadados_id_igreja, metadados_id_usuario, id_objeto, confirmacao)
-                VALUES
-                    (?, CURRENT_TIMESTAMP(), ?, ?, ?, ?, ?, ?)
-            `,
-            [tipo_metadado, data_confirmacao, nome_metadado, id_igreja, id_usuario, id_objeto, confirmacao])
-            .then((results) => {
-                resolve(results);
-            })
-            .catch((error) => {
-                reject(error);
-            })
-        })
-    },
     createResponse: function (message, returnObj, request_type, request_status) {
         let response = {
             message: message,
@@ -53,21 +35,18 @@ let functions = {
         return new Promise((resolve, reject) => {
             let result = {};
             let self = this;
+
             self.executeSQL(`
                 SELECT
-                    ${only_size ? 'count(id_usuario)' : "*"}
+                    ${only_size ? 'count(u.id_usuario)' : "*"}
                 FROM 
                     usuario u
                 LEFT JOIN
-                    metadados m
+                    membros_igreja mi
                 ON
-                    m.metadados_id_usuario = u.id_usuario 
+                    mi.id_usuario = u.id_usuario 
                 WHERE
-                    m.tipo_metadado = "membro"
-                AND
-                    m.confirmacao = 1
-                AND
-                    m.metadados_id_igreja = ?`,
+                    mi.id_igreja = ?`,
                 [id_igreja])
             .then((results) => { 
                 let members = results.map(membro => {
@@ -80,6 +59,7 @@ let functions = {
                         imagem_usuario: membro.imagem_usuario
                     }
                 })
+
                 self.retornaTags(id_igreja).then((results2) => { 
                     let tags_usuarios = results2;
                     for (let i = 0; i < members.length; i++) {
@@ -89,6 +69,7 @@ let functions = {
                             }
                         })
                     }
+
                     self.retornaFuncoes(id_igreja).then((results3) => {
                         let funcoes_usuarios = results3;
                         for (let i = 0; i < members.length; i++) {
@@ -98,6 +79,7 @@ let functions = {
                                 }
                             })
                         }
+
                         result.object = members;
                         result.size = members.length;
                         resolve(result);
@@ -166,6 +148,23 @@ let functions = {
                 reject(error);
             })
         })
+    },
+    returnFormattedMusics: function (musics, tags) {
+        let musicList = musics.map(music => {
+            return {
+                id: music.id_musica,
+                name: music.nome_musica,
+                artist: music.artista_musica,
+                video_url: music.video_url,
+                cipher_url: music.cifra_url,
+                image: music.imagem,
+                video_id: music.video_id
+            }
+        })
+
+        musicList["tags"] = tags;
+
+        return musicList;
     }
 }
 

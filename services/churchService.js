@@ -2,6 +2,7 @@ const functions = require("../functions/functions.js");
 const multer = require("multer");
 const multerS3 = require('multer-s3');
 const aws = require('aws-sdk');
+const _permissions = require("../functions/permissions.js");
 
 let churchService = {
     returnChurches: function () {
@@ -246,29 +247,25 @@ let churchService = {
                         SELECT
                             count(*)
                         FROM 
-                            metadados
+                            curtidas_avisos
                         WHERE
-                            tipo_metadado = 'curtida_aviso'
-                        AND
-                            confirmacao = 1
-                        AND
-                            id_objeto = ai.id_aviso_igreja
+                            id_aviso = ai.id_aviso_igreja
                     ) as quantidade_curtidas,
-                    CASE WHEN (
-                        SELECT
-                            count(*)
-                        FROM 
-                            metadados
-                        WHERE
-                            tipo_metadado = 'curtida_aviso'
-                        AND
-                            confirmacao = 1
-                        AND
-                            id_objeto = ai.id_aviso_igreja
-                        AND
-                            metadados_id_usuario = ?
-                    ) 
-                    THEN 1 ELSE 0
+                    CASE WHEN 
+                        (
+                            SELECT
+                                count(*)
+                            FROM 
+                                curtidas_avisos
+                            WHERE
+                                id_aviso = ai.id_aviso_igreja
+                            AND
+                                id_usuario = ?
+                        ) 
+                    THEN 
+                        1
+                    ELSE
+                        0
                     END as current_user_liked
                 FROM
                     avisos_igreja ai
@@ -304,10 +301,17 @@ let churchService = {
             })
         })
     },
-    likeWarning: function (company_id, user_id, warning_id) {
+    likeWarning: function (user_id, warning_id) {
         return new Promise((resolve, reject) => {
-            functions.insertMetadata("curtida_aviso", "CURRENT_TIMESTAMP()", "curtida_aviso", company_id, user_id, warning_id, 1)
-            .then((results) => {
+            functions.executeSQL(
+                `
+                    INSERT INTO
+                        curtidas_avisos
+                        (id_usuario, id_aviso)
+                    VALUES
+                        (?, ?)
+                `, [user_id, warning_id]
+            ).then((results) => {
                 if (results.affectedRows <= 0) {
                     reject("Ocorreu um erro ao curtir o aviso");
                 }
@@ -319,32 +323,78 @@ let churchService = {
             })
         })
     },
-    sendInvite: function (company_id, user_id) {
+    sendInvite: function (company_id, user_id, requesting_user_id) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL("SELECT * FROM metadados WHERE metadados_id_igreja = ? AND metadados_id_usuario = ?", [company_id, user_id])
-            .then((results) => {
-                if (results.length > 0) {
-                    reject("Você não pode enviar um convite para quem já é membro");
-                }
+            if (user_id == requesting_user_id) {
+                reject("Você não pode se auto convidar para entrar em uma igreja");
+            }
 
-                functions.insertMetadata('membro', 'CURRENT_TIMESTAMP()', 'membro', company_id, user_id, 0).then((results) => {
-                    if (results.affectedRows <= 0) {
-                        reject("Ocorreu um erro ao enviar o convite");
+            _permissions.isMember(user_id, company_id).then(() => {
+                reject("Você não pode enviar um convite para quem já é membro");
+            }).catch(() => {
+                functions.executeSQL(
+                    `
+                        SELECT
+                            count(id) AS count
+                        FROM
+                            convites_membros_igreja
+                        WHERE
+                            id_usuario_requisitado = ?
+                        AND
+                            id_igreja = ?
+                    `, [user_id, company_id]
+                ).then((results) => {
+                    console.log(results)
+                    if (results[0].count > 0) {
+                        reject("Essa pessoa já tem um convite pendente");
+                    } else {
+                        functions.executeSQL(
+                            `
+                                INSERT INTO
+                                    convites_membros_igreja
+                                    (id_igreja, id_usuario_requisitado, id_usuario_requisitante)
+                                VALUES
+                                    (?, ?, ?)
+                            `, [company_id, user_id, requesting_user_id]
+                        ).then((results) => {
+                            if (results.affectedRows <= 0) {
+                                reject("Ocorreu um erro ao enviar o convite");
+                            }
+        
+                            resolve();
+                        }).catch((error) => {
+                            reject(error);
+                        })
                     }
-
-                    resolve();
-                })
-                .catch((error2) => {
-                    reject(error2);
                 })
             })
-            .catch((error) => {
+        })
+    },
+    addMember: function (company_id, user_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    INSERT INTO
+                        membros_igreja
+                        (id_igreja, id_usuario)
+                    VALUES
+                        (?, ?)
+                `, [company_id, user_id]
+            ).then(() => {
+                resolve();
+            }).catch((error) => {
                 reject(error);
             })
         })
     },
     addFunction: function (new_function, company_id, user_id) {
         return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    INSERT INTO
+
+                `
+            )
             functions.insertMetadata("funcaoUsuario", "", new_function, company_id, user_id, 0, 0).then((results2) => {
                 if (results2.affectedRows > 0) {
                     reject("Não foi possível adicionar a função ao usuário");
@@ -361,15 +411,11 @@ let churchService = {
         return new Promise((resolve, reject) => {
             functions.executeSQL(`
                 DELETE FROM
-                    metadados
+                    membros_igreja
                 WHERE
-                    tipo_metadado = "membro"
+                    id_igreja = ?
                 AND
-                    confirmacao = 1
-                AND
-                    metadados_id_igreja = ?
-                AND
-                    metadados_id_usuario = ?`,
+                    id_usuario = ?`,
             [company_id, user_id])
             .then(() => {
                 resolve();

@@ -121,7 +121,7 @@ router.post("/retorna-avisos", login, (req, res, next) => {
 })
 
 router.post("/curtir-aviso", login, (req, res, next) => {
-    _churchService.likeWarning(req.body.id_igreja, req.usuario.id_usuario, req.body.id_aviso).then(() => {
+    _churchService.likeWarning(req.usuario.id_usuario, req.body.id_aviso).then(() => {
         let response = functions.createResponse("Aviso foi curtido com sucesso", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
@@ -129,9 +129,9 @@ router.post("/curtir-aviso", login, (req, res, next) => {
     })
 })
 
-router.post("/permissao-gerenciar", login, (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
-        let response = functions.createResponse("Permissão concedida", null, "POST", 200);
+router.post("/permissao", login, (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((results) => {
+        let response = functions.createResponse("Retorno das permissões", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         console.log(error)
@@ -140,18 +140,7 @@ router.post("/permissao-gerenciar", login, (req, res, next) => {
 })
 
 router.post("/envia-convite", login, (req, res, next) => {
-    if (req.body.id_usuario == req.usuario.id_usuario) {
-        let response = {
-            message: "Você não pode se auto convidar para entrar em uma igreja",
-            request: {
-                type: "POST",
-                status: 401
-            }
-        }
-        return res.status(401).send(response);
-    }
-
-    _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario).then(() => {
+    _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario).then(() => {
         let response = functions.createResponse("Convite enviado", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {

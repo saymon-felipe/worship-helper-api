@@ -1,9 +1,10 @@
 const puppeteer = require('puppeteer');
 
 let cyphers = {
-    scrapeCifraClub: function (query) {
+    scrapeCifraClub: function (name, artist) {
         return new Promise(async (resolve, reject) => {
             try {
+                let query = name + " " + artist;
                 let url = `https://www.cifraclub.com.br/?q=${query.toLowerCase().split(" ").join("+")}`;
                 const browser = await puppeteer.launch({
                     args: ['--no-sandbox', '--disable-setuid-sandbox']

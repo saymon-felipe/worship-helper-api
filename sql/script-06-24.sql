@@ -30,3 +30,30 @@ alter table tags_de_musicas add column id int not null primary key auto_incremen
 
 
 insert into versaodb (versao) values ("24.06.1");
+
+drop table metadados;
+
+create table curtidas_avisos (
+	id int not null primary key auto_increment,
+    id_usuario int not null,
+    id_aviso int not null,
+    data_criacao varchar(100) not null default current_timestamp()
+);
+
+create table membros_igreja (
+	id int not null primary key auto_increment,
+    id_igreja int not null,
+    id_usuario int not null,
+    data_criacao varchar(100) not null default current_timestamp()
+);
+
+create table convites_membros_igreja (
+	id int not null primary key auto_increment,
+    id_igreja int not null,
+    id_usuario_requisitado int not null,
+    id_usuario_requisitante int not null,
+    data_criacao varchar(100) not null default current_timestamp(),
+    data_confirmacao varchar(100)
+);
+
+insert into versaodb (versao) values ("24.07.1");

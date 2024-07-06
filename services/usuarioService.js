@@ -1,6 +1,7 @@
 const functions = require("../functions/functions.js");
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const _churchService = require("./churchService.js");
 
 let usuarioService = {
     returnUser: function (user_id) {
@@ -75,16 +76,12 @@ let usuarioService = {
                     END as administrador
                 FROM 
                     igreja
-                LEFT JOIN
-                    metadados
-                ON
-                    metadados.tipo_metadado = 'membro'
+                INNER JOIN
+                    membros_igreja
                 WHERE
-                    igreja.id_igreja = metadados.metadados_id_igreja 
+                    igreja.id_igreja = membros_igreja.id_igreja 
                 AND
-                    metadados.metadados_id_usuario = ?
-                AND
-                    metadados.confirmacao = 1
+                    membros_igreja.id_usuario = ?
             `, 
             [user_id, user_id, user_id])
             .then((results) => {
@@ -193,13 +190,17 @@ let usuarioService = {
     },
     rejectInvite: function (company_id, user_id) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL('DELETE FROM metadados WHERE metadados_id_igreja = ? AND metadados_id_usuario = ? AND tipo_metadado = "membro" AND confirmacao = 0', [company_id, user_id])
-            .then((results) => {
-                if (results.length <= 0) {
-                    reject("Não existem convites para serem excluídos");
-                } else {
-                    resolve();
-                }
+            functions.executeSQL(
+                `
+                    DELETE FROM 
+                        convites_membros_igreja
+                    WHERE
+                        id_igreja = ?
+                    AND
+                        id_usuario = ?
+                `, [company_id, user_id]
+            ).then(() => {
+                resolve();
             })
             .catch((error) => {
                 reject(error);
@@ -208,13 +209,23 @@ let usuarioService = {
     },
     acceptInvite: function (company_id, user_id) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL('UPDATE metadados SET confirmacao = 1, data_confirmacao = CURRENT_TIMESTAMP() WHERE confirmacao = 0 AND tipo_metadado = "membro" AND metadados_id_igreja = ? AND metadados_id_usuario = ?', [company_id, user_id])
-            .then((results) => {
-                if (results.length <= 0) {
-                    reject("Não existem convites para serem aceitos");
-                }
-                
-                resolve();
+            functions.executeSQL(
+                `
+                    UPDATE 
+                        convites_membros_igreja
+                    SET
+                        data_confirmacao = current_timestamp()
+                    WHERE
+                        id_igreja = ?
+                    AND
+                        id_usuario_requisitado = ?
+                    AND
+                        data_confirmacao IS NULL
+                `, [company_id, user_id]
+            ).then(() => {
+                _churchService.addMember(company_id, user_id).then(() => {
+                    resolve();
+                })
             })
             .catch((error) => {
                 reject(error);
@@ -223,31 +234,32 @@ let usuarioService = {
     },
     returnInvites: function (user_id) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL(`
-                SELECT
-                    *
-                FROM
-                    metadados
-                INNER JOIN
-                    igreja
-                ON 
-                    igreja.id_igreja = metadados.metadados_id_igreja
-                WHERE
-                    metadados.metadados_id_usuario = ?
-                AND 
-                    metadados.confirmacao = 0
-                AND 
-                    metadados.tipo_metadado = "membro";
-            `, [user_id])
-            .then((results) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        cmi.*,
+                        i.*
+                    FROM
+                        convites_membros_igreja cmi
+                    INNER JOIN
+                        igreja i
+                    ON
+                        i.id_igreja = cmi.id_igreja
+                    WHERE
+                        cmi.id_usuario_requisitado = ?
+                    AND
+                        cmi.data_confirmacao IS NULL
+                `, [user_id]
+            ).then((results) => {
+                if (results.length == 0) {
+                    resolve(results);
+                }
+
                 let object = results.map(invite => {
                     return {
-                        id_igreja: invite.metadados_id_igreja,
+                        id_igreja: invite.id_igreja,
                         nome_igreja: invite.nome_igreja,
-                        imagem_igreja: invite.imagem_igreja,
-                        id_metadado: invite.id_metadado,
-                        confirmacao: invite.confirmacao,
-                        tipo_metadado: invite.tipo_metadado
+                        imagem_igreja: invite.imagem_igreja
                     }
                 })
 

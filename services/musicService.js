@@ -39,10 +39,10 @@ let musicService = {
                 `
                     INSERT INTO
                         musicas
-                        (nome_musica, artista_musica, video_url, cifra_url, imagem)
+                        (nome_musica, artista_musica, video_url, cifra_url, imagem, video_id)
                     VALUES
-                        (?, ?, ?, ?, ?)
-                `, [name, artist, video_url, cipher_url, thumbnail]
+                        (?, ?, ?, ?, ?, ?)
+                `, [name, artist, video_url, cipher_url, thumbnail, video_url.split("?v=")[1]]
             ).then(() => {
                 resolve();
             }).catch((error) => {
@@ -60,21 +60,27 @@ let musicService = {
                         musicas m
                 `
             ).then((results) => {
-                let musicList = results.map(music => {
-                    return {
-                        id: music.id_musica,
-                        name: music.nome_musica,
-                        artist: music.artista_musica,
-                        video_url: music.video_url,
-                        cipher_url: music.cifra_url,
-                        image: music.imagem,
-                        video_id: music.video_id
-                    }
-                })
-
-                musicList["tags"] = [];
-
+                let musicList = functions.returnFormattedMusics(results, []);
                 resolve(musicList);
+            }).catch((error) => {
+                reject(error);
+            })
+        })
+    },
+    returnMusic: function (music_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        m.*
+                    FROM
+                        musicas m
+                    WHERE
+                        m.id_musica = ?
+                `, [music_id]
+            ).then((results) => {
+                let musicList = functions.returnFormattedMusics(results, []);
+                resolve(musicList[0]);
             }).catch((error) => {
                 reject(error);
             })
