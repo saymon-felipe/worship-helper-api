@@ -64,4 +64,31 @@ router.get("/:music_id", login, (req, res, next) => {
     })
 })
 
+router.post("/comentarios/criar", login, (req, res, next) => {
+    _musicService.postMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica).then(() => {
+        let response = functions.createResponse("Comentário criado com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error);
+    })
+})
+
+router.post("/comentarios/retorna", login, (req, res, next) => {
+    _musicService.returnMusicComments(req.body.id_musica, req.usuario.id_usuario).then((results) => {
+        let response = functions.createResponse("Retorno dos comentários da musica", results, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error);
+    })
+})
+
+router.post("/comentarios/like", login, (req, res, next) => {
+    _musicService.likeComment(req.body.id_aviso, req.usuario.id_usuario).then(() => {
+        let response = functions.createResponse("Curtida no comentário da musica feito com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error);
+    })
+})
+
 module.exports = router;

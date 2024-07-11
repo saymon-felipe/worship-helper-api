@@ -85,6 +85,113 @@ let musicService = {
                 reject(error);
             })
         })
+    },
+    returnMusicComments: function (music_id, user_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(`
+                SELECT
+                    *,
+                    (
+                        SELECT
+                            count(*)
+                        FROM 
+                            curtidas_comentarios_musicas
+                        WHERE
+                            id_comentario = cm.id
+                    ) as quantidade_curtidas,
+                    CASE WHEN 
+                        (
+                            SELECT
+                                count(*)
+                            FROM 
+                                curtidas_comentarios_musicas
+                            WHERE
+                                id_comentario = cm.id
+                            AND
+                                id_usuario = ?
+                        ) 
+                    THEN 
+                        1
+                    ELSE
+                        0
+                    END as current_user_liked
+                FROM
+                    comentarios_musica cm
+                INNER JOIN
+                    usuario u
+                ON
+                    cm.id_usuario = u.id_usuario
+                WHERE
+                    cm.id_musica = ?
+            `, [user_id, music_id])
+            .then((results) => {
+                let comentarios = results.map((comment) => {
+                    return {
+                        id_aviso: comment.id,
+                        id_igreja: null,
+                        mensagem: comment.mensagem,
+                        data_criacao: comment.data_criacao,
+                        quantidade_curtidas: comment.quantidade_curtidas,
+                        usuario_atual_curtiu: comment.current_user_liked,
+                        criador: {
+                            id_usuario: comment.id_usuario,
+                            nome_usuario: comment.nome_usuario,
+                            imagem_usuario: comment.imagem_usuario
+                        }
+                    }
+                })
+
+                resolve(comentarios);
+            }).catch((error) => {
+                reject(error);
+            })
+        })
+    },
+    postMusicComment: function (message, user_id, music_id) {
+        return new Promise((resolve, reject) => {
+            if (message.length > 100) {
+                reject("Mensagem é muito grande, limite de 100 caracteres");
+            }
+
+            functions.executeSQL(`
+                INSERT INTO
+                    comentarios_musica
+                    (id_musica, id_usuario, mensagem)
+                VALUES
+                    (?, ?, ?)
+            `, [music_id, user_id, message])
+            .then((results) => {
+                if (results.affectedRows <= 0) {
+                    reject("Não foi possível publicar o comentário");
+                }
+
+                resolve();
+            }).catch((error) => {
+                reject(error);
+            })
+        })
+    },
+    likeComment: function (id_comment, user_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    INSERT INTO
+                        curtidas_comentarios_musicas
+                        (id_usuario, id_comentario)
+                    VALUES
+                        (?, ?)
+                `, [user_id, id_comment]
+            ).then((results) => {
+                if (results.affectedRows <= 0) {
+                    reject("Ocorreu um erro ao curtir o comentário");
+                }
+
+                resolve();
+            })
+            .catch((error) => {
+                reject(error);
+            })
+        })
     }
 }
 
