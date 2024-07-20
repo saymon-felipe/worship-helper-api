@@ -33,20 +33,64 @@ let musicService = {
             })
         })
     },
-    createMusic: function (name, artist, video_url, cipher_url, thumbnail) {
+    insertMusicTags: function (music_id, music_tags) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL(
-                `
-                    INSERT INTO
-                        musicas
-                        (nome_musica, artista_musica, video_url, cifra_url, imagem, video_id)
-                    VALUES
-                        (?, ?, ?, ?, ?, ?)
-                `, [name, artist, video_url, cipher_url, thumbnail, video_url.split("?v=")[1]]
-            ).then(() => {
+            let promises = [];
+
+            for (let i = 0; i < music_tags.length; i++) {
+                promises.push(
+                    functions.executeSQL(
+                        `
+                            INSERT INTO
+                                tags_de_musicas
+                                (tag_id_musica, id_tag_referencia)
+                            VALUES
+                                (?, ?)
+                        `, [music_id, music_tags[i].id]
+                    )
+                )
+            }
+
+            Promise.all(promises).then(() => {
                 resolve();
             }).catch((error) => {
                 reject(error);
+            })
+        })
+    },
+    createMusic: function (name, artist, video_url, cipher_url, thumbnail, music_tags) {
+        return new Promise((resolve, reject) => {
+            let self = this;
+
+            functions.executeSQL(
+                `
+                    SELECT
+                        *
+                    FROM
+                        musicas
+                    WHERE
+                        nome_musica LIKE "%?%"
+                `, [name]
+            ).then((results) => {
+                if (results.length > 0) {
+                    reject("Música já cadastrada no banco de dados");
+                } else {
+                    functions.executeSQL(
+                        `
+                            INSERT INTO
+                                musicas
+                                (nome_musica, artista_musica, video_url, cifra_url, imagem, video_id)
+                            VALUES
+                                (?, ?, ?, ?, ?, ?)
+                        `, [name, artist, video_url, cipher_url, thumbnail, video_url.split("?v=")[1]]
+                    ).then((results) => {
+                        self.insertMusicTags(results.insertId, music_tags).then(() => {
+                            resolve();
+                        })
+                    }).catch((error) => {
+                        reject(error);
+                    })
+                }
             })
         })
     },
@@ -60,8 +104,11 @@ let musicService = {
                         musicas m
                 `
             ).then((results) => {
-                let musicList = functions.returnFormattedMusics(results, []);
-                resolve(musicList);
+                functions.returnFormattedMusics(results).then((results2) => {
+                    resolve(results2);
+                }).catch((error) => {
+                    reject(error);
+                })
             }).catch((error) => {
                 reject(error);
             })
@@ -79,8 +126,11 @@ let musicService = {
                         m.id_musica = ?
                 `, [music_id]
             ).then((results) => {
-                let musicList = functions.returnFormattedMusics(results, []);
-                resolve(musicList[0]);
+                functions.returnFormattedMusics(results).then((results2) => {
+                    resolve(results2[0]);
+                }).catch((error) => {
+                    reject(error);
+                })
             }).catch((error) => {
                 reject(error);
             })
@@ -187,6 +237,24 @@ let musicService = {
                 }
 
                 resolve();
+            })
+            .catch((error) => {
+                reject(error);
+            })
+        })
+    },
+    returnMusicTagsList: function () {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        id_tag_musicas AS id,
+                        nome_tag AS nome
+                    FROM
+                        lista_tags_musicas
+                `, []
+            ).then((results) => {
+                resolve(results);
             })
             .catch((error) => {
                 reject(error);

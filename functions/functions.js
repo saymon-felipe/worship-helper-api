@@ -149,22 +149,67 @@ let functions = {
             })
         })
     },
-    returnFormattedMusics: function (musics, tags) {
-        let musicList = musics.map(music => {
-            return {
-                id: music.id_musica,
-                name: music.nome_musica,
-                artist: music.artista_musica,
-                video_url: music.video_url,
-                cipher_url: music.cifra_url,
-                image: music.imagem,
-                video_id: music.video_id
+    returnFormattedMusics: function (musics) {
+        return new Promise((resolve, reject) => {
+            let musicList = musics.map(music => {
+                return {
+                    id: music.id_musica,
+                    name: music.nome_musica,
+                    artist: music.artista_musica,
+                    video_url: music.video_url,
+                    cipher_url: music.cifra_url,
+                    image: music.imagem,
+                    video_id: music.video_id,
+                    tags: []
+                }
+            })
+
+            let promises = [];
+            let musicsTags = [];
+    
+            for (let i = 0; i < musicList.length; i++) {
+                promises.push(
+                    functions.executeSQL(
+                        `
+                            SELECT
+                                tm.tag_id_musica,
+                                tm.id_tag_referencia,
+                                ltm.nome_tag
+                            FROM
+                                tags_de_musicas tm
+                            INNER JOIN
+                                lista_tags_musicas ltm
+                            ON
+                                ltm.id_tag_musicas = tm.id_tag_referencia
+                            WHERE
+                                tag_id_musica = ?
+                        `, [musicList[i].id]
+                    ).then((results) => {
+                        musicsTags.push(results);
+                    })
+                )
             }
+    
+            Promise.all(promises).then(() => {
+                for (let i = 0; i < musicList.length; i++) {
+                    for (let j = 0; j < musicsTags.length; j++) {
+                        if (musicsTags[j].length > 0 && musicsTags[j][0].tag_id_musica == musicList[i].id) {
+                            let tags = musicsTags[j].map(tag => {
+                                return {
+                                    id: tag.id_tag_referencia,
+                                    nome: tag.nome_tag
+                                }
+                            })
+                            musicList[i].tags = tags;
+                        }
+                    }
+                }
+
+                resolve(musicList);
+            }).catch((error) => {
+                reject(error);
+            })
         })
-
-        musicList["tags"] = tags;
-
-        return musicList;
     }
 }
 

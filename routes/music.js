@@ -38,7 +38,7 @@ router.post("/", login, (req, res, next) => {
         return res.status(401).send({ message: "Você não tem autorização para cadastrar músicas" });
     }
 
-    _musicService.createMusic(req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.video_image).then(() => {
+    _musicService.createMusic(req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.video_image, req.body.music_tags).then(() => {
         let response = functions.createResponse("Música cadastrada com sucesso no banco de dados", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
@@ -55,7 +55,7 @@ router.get("/", login, (req, res, next) => {
     })
 })
 
-router.get("/:music_id", login, (req, res, next) => {
+router.get("/retorna_musica/:music_id", login, (req, res, next) => {
     _musicService.returnMusic(req.params.music_id).then((results) => {
         let response = functions.createResponse("Retorno da música" + req.params.music_id, results, "GET", 200);
         return res.status(200).send(response);
@@ -85,6 +85,15 @@ router.post("/comentarios/retorna", login, (req, res, next) => {
 router.post("/comentarios/like", login, (req, res, next) => {
     _musicService.likeComment(req.body.id_aviso, req.usuario.id_usuario).then(() => {
         let response = functions.createResponse("Curtida no comentário da musica feito com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error);
+    })
+})
+
+router.get("/tags", login, (req, res, next) => {
+    _musicService.returnMusicTagsList().then((results) => {
+        let response = functions.createResponse("Retorno da lista de tags de música2s", results, "GET", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
