@@ -554,6 +554,10 @@ let churchService = {
                         e.id_igreja = ?
                 `, [company_id, company_id]
             ).then((results) => {
+                if (results.id_evento == null) {
+                    resolve([]);
+                }
+
                 let newEvents = [];
                 let promises = [];
                 
