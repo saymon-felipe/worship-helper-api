@@ -210,6 +210,16 @@ let functions = {
                 reject(error);
             })
         })
+    },
+    dateToDB: function (date) {
+        let partsData = date.split('-');
+        let year = partsData[0];
+        let month = partsData[1];
+        let day = partsData[2];
+
+        let formattedDate = year + '-' + month + '-' + day;
+
+        return formattedDate;
     }
 }
 

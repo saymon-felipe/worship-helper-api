@@ -460,6 +460,221 @@ let churchService = {
                 reject(error);
             })
         })
+    },
+    createEvent: function (creator_id, company_id, event_date, event_name, event_members, event_musics) {
+        return new Promise((resolve, reject) => {
+            if (event_name.trim() == "" || event_members.length == 0 || event_musics.length == 0) {
+                reject("Parâmetros incorretos");
+            }
+
+            if (event_name.length > 15) {
+                reject("Nome muito grande, limite 15 caracteres");
+            }
+
+            functions.executeSQL(
+                `
+                    INSERT INTO
+                        eventos
+                        (id_igreja, nome, data_inicio, id_criador)
+                    VALUES
+                        (?, ?, ?, ?)
+                `, [company_id, event_name, functions.dateToDB(event_date), creator_id]
+            ).then((results) => {
+                let promises = [];
+
+                for (let i = 0; i < event_members.length; i++) { //Inserir os membros do evento
+                    promises.push(
+                        functions.executeSQL(
+                            `
+                                INSERT INTO
+                                    membros_eventos
+                                    (id_usuario, id_funcao, id_evento)
+                                VALUES
+                                    (?, ?, ?)
+                            `, [event_members[i].id_usuario, event_members[i].id_funcao, results.insertId]
+                        )
+                    )
+                }
+
+                for (let i = 0; i < event_musics.length; i++) { //Inserir as músicas do evento
+                    promises.push(
+                        functions.executeSQL(
+                            `
+                                INSERT INTO
+                                    musicas_eventos
+                                    (id_musica, id_evento)
+                                VALUES
+                                    (?, ?)
+                            `, [event_musics[i].id, results.insertId]
+                        )
+                    )
+                }
+
+                Promise.all(promises).then(() => {
+                    resolve();
+                }).catch((error) => {
+                    reject(error);
+                })
+            })
+        })
+    },
+    returnEvents: function (company_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        e.id AS id_evento,
+                        e.nome AS nome_evento,
+                        e.data_inicio AS data_inicio_evento,
+                        (
+                            SELECT
+                                ti.nome_tag
+                            FROM
+                                tags_igreja ti
+                            INNER JOIN
+                                tags_usuario tu
+                            ON
+                                ti.id_tag = tu.tags_usuario_id_tag_referencia
+                            WHERE
+                                ti.tags_id_igreja = ? AND tu.tags_usuario_id_usuario = e.id_criador
+                        ) AS criador_tag,
+                        COUNT(me.id) AS quantidade_membros,
+                        COUNT(mue.id) AS quantidade_musicas
+                    FROM
+                        eventos e
+                    INNER JOIN
+                        membros_eventos me
+                    ON
+                        me.id_evento = e.id
+                    INNER JOIN
+                        musicas_eventos mue
+                    ON
+                        mue.id_evento = e.id
+                    WHERE
+                        e.id_igreja = ?
+                `, [company_id, company_id]
+            ).then((results) => {
+                let newEvents = [];
+                let promises = [];
+                
+                for (let i = 0; i < results.length; i++) {
+                    let currentEvent = results[i];
+
+                    promises.push(
+                        functions.executeSQL(
+                            `
+                                SELECT
+                                    u.imagem_usuario,
+                                    u.id_usuario
+                                FROM
+                                    usuario u
+                                INNER JOIN
+                                    membros_eventos me
+                                ON
+                                    me.id_usuario = u.id_usuario
+                                WHERE
+                                    me.id_evento = ?
+                            `, [currentEvent.id_evento]
+                        ).then((results) => {
+                            currentEvent["membros_evento"] = results;
+                            newEvents.push(currentEvent);
+                        })
+                    )
+                }
+
+                Promise.all(promises).then(() => {
+                    resolve(newEvents);
+                }).catch((error) => {
+                    reject(error);
+                })
+            })
+        })
+    },
+    returnEvent: function (event_id, company_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        e.id AS id_evento,
+                        e.nome AS nome_evento,
+                        e.data_inicio AS data_inicio_evento,
+                        (
+                            SELECT
+                                ti.nome_tag
+                            FROM
+                                tags_igreja ti
+                            INNER JOIN
+                                tags_usuario tu
+                            ON
+                                ti.id_tag = tu.tags_usuario_id_tag_referencia
+                            WHERE
+                                ti.tags_id_igreja = ? AND tu.tags_usuario_id_usuario = e.id_criador
+                        ) AS criador_tag,
+                        COUNT(me.id) AS quantidade_membros,
+                        COUNT(mue.id) AS quantidade_musicas
+                    FROM
+                        eventos e
+                    INNER JOIN
+                        membros_eventos me
+                    ON
+                        me.id_evento = e.id
+                    INNER JOIN
+                        musicas_eventos mue
+                    ON
+                        mue.id_evento = e.id
+                    WHERE
+                        e.id_igreja = ?
+                    AND
+                        e.id = ?
+                `, [company_id, company_id, event_id]
+            ).then((results) => {                
+                functions.executeSQL(
+                    `
+                        SELECT
+                            u.imagem_usuario,
+                            u.id_usuario,
+                            u.nome_usuario,
+                            fi.nome_funcao AS user_occupation
+                        FROM
+                            usuario u
+                        INNER JOIN
+                            membros_eventos me
+                        ON
+                            me.id_usuario = u.id_usuario
+                        LEFT JOIN
+                            funcoes_igreja fi
+                        ON
+                            fi.id_funcoes_igreja = me.id_funcao
+                        WHERE
+                            me.id_evento = ?
+                    `, [results[0].id_evento]
+                ).then((results2) => {
+                    results[0]["membros_evento"] = results2;
+
+                    functions.executeSQL(
+                        `
+                            SELECT
+                                m.nome_musica,
+                                m.artista_musica,
+                                m.imagem AS imagem_musica,
+                                m.id_musica
+                            FROM
+                                musicas m
+                            INNER JOIN
+                                musicas_eventos me
+                            ON
+                                me.id_musica = m.id_musica
+                            WHERE
+                                me.id_evento = ?
+                        `, [results[0].id_evento]
+                    ).then((results3) => {
+                        results[0]["musicas"] = results3;
+
+                        resolve(results[0]);
+                    })
+                })
+            })
+        })
     }
 }
 

@@ -203,7 +203,7 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
         return res.status(500).send(response);
     }
 
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.params.id_igreja).then(() => {
         _churchService.changeChurchImage(req.params.id_igreja, req.file.location).then(() => {
             let response = functions.createResponse("Imagem da igreja alterada com sucesso", null, "PATCH", 200);
             return res.status(200).send(response);
@@ -214,5 +214,44 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
         return res.status(401).send(error);
     })
 });
+
+router.post("/cadastrar-evento", login, (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(() => {
+            let response = functions.createResponse("Evento cadastrado com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/retorna-eventos", login, (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+        _churchService.returnEvents(req.body.id_igreja).then((results) => {
+            let response = functions.createResponse("Retorno dos eventos da igreja", results, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/retorna-evento/:id_evento", login, (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+        _churchService.returnEvent(req.params.id_evento, req.body.id_igreja).then((results) => {
+            let response = functions.createResponse("Retorno do evento", results, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
 
 module.exports = router;
