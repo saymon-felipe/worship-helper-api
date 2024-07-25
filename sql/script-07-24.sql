@@ -80,4 +80,7 @@ INSERT INTO tons (nome, tipo) VALUES
 ('Bbm', 'menor'),
 ('Bm', 'menor');
 
+ALTER TABLE eventos
+MODIFY COLUMN data_inicio varchar(50) not null;
+
 INSERT INTO versaodb (versao) values ("24.07.3");

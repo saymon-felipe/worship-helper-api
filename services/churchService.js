@@ -523,6 +523,7 @@ let churchService = {
             functions.executeSQL(
                 `
                     SELECT
+                        e.id_igreja,
                         e.id AS id_evento,
                         e.nome AS nome_evento,
                         e.data_inicio AS data_inicio_evento,
@@ -542,22 +543,24 @@ let churchService = {
                         COUNT(mue.id) AS quantidade_musicas
                     FROM
                         eventos e
-                    INNER JOIN
+                    LEFT JOIN
                         membros_eventos me
                     ON
                         me.id_evento = e.id
-                    INNER JOIN
+                    LEFT JOIN
                         musicas_eventos mue
                     ON
                         mue.id_evento = e.id
                     WHERE
                         e.id_igreja = ?
+                    GROUP BY
+                        id_evento;
                 `, [company_id, company_id]
             ).then((results) => {
-                if (results.id_evento == null) {
+                if (results[0].id_evento == null) {
                     resolve([]);
                 }
-
+                
                 let newEvents = [];
                 let promises = [];
                 
