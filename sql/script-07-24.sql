@@ -84,3 +84,14 @@ ALTER TABLE eventos
 MODIFY COLUMN data_inicio varchar(50) not null;
 
 INSERT INTO versaodb (versao) values ("24.07.3");
+
+alter table musicas_eventos add column tom int not null;
+
+create table tons_igreja (
+	id int not null primary key auto_increment,
+    id_tom int not null,
+    id_igreja int not null,
+    id_musica int not null
+);
+
+insert into versaodb (versao) values ("24.07.4");
