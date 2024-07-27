@@ -160,7 +160,8 @@ let functions = {
                     cipher_url: music.cifra_url,
                     image: music.imagem,
                     video_id: music.video_id,
-                    tags: []
+                    tags: [],
+                    tom: music.tom
                 }
             })
 

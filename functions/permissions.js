@@ -29,6 +29,10 @@ let permissions = {
                     })
                 }
 
+                if (!administrador && !apenas_membro) {
+                    reject("Permissão negada");
+                }
+
                 let retorno = {
                     administrador: administrador,
                     apenas_membro: apenas_membro

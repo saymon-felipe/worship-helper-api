@@ -502,10 +502,10 @@ let churchService = {
                             `
                                 INSERT INTO
                                     musicas_eventos
-                                    (id_musica, id_evento)
+                                    (id_musica, id_evento, tom)
                                 VALUES
-                                    (?, ?)
-                            `, [event_musics[i].id, results.insertId]
+                                    (?, ?, ?)
+                            `, [event_musics[i].id, results.insertId, event_musics[i].tone.id]
                         )
                     )
                 }
@@ -553,11 +553,13 @@ let churchService = {
                         mue.id_evento = e.id
                     WHERE
                         e.id_igreja = ?
+                    AND
+                        e.data_inicio > DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
                     GROUP BY
                         id_evento;
                 `, [company_id, company_id]
             ).then((results) => {
-                if (results[0].id_evento == null) {
+                if (results.length == 0) {
                     resolve([]);
                 }
                 
@@ -664,7 +666,19 @@ let churchService = {
                                 m.nome_musica,
                                 m.artista_musica,
                                 m.imagem AS imagem_musica,
-                                m.id_musica
+                                m.id_musica,
+                                (
+                                    SELECT
+                                        t.nome
+                                    FROM
+                                        tons t
+                                    INNER JOIN
+                                        musicas_eventos me
+                                    ON
+                                        me.tom = t.id
+                                    WHERE
+                                        me.id_musica = m.id_musica
+                                ) AS tom
                             FROM
                                 musicas m
                             INNER JOIN
@@ -680,6 +694,50 @@ let churchService = {
                         resolve(results[0]);
                     })
                 })
+            })
+        })
+    },
+    returnTones: function (music_id, company_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    SELECT
+                        id,
+                        nome
+                    FROM
+                        tons
+                `, []
+            ).then((results) => {
+                let allTones = results;
+
+                functions.executeSQL(
+                    `
+                        SELECT
+                            t.id,
+                            t.nome
+                        FROM
+                            tons t
+                        INNER JOIN
+                            tons_igreja ti
+                        ON
+                            ti.id_tom = t.id
+                        WHERE
+                            ti.id_igreja = ? AND ti.id_musica = ?
+                    `, [company_id, music_id]
+                ).then((results2) => {
+                    let churchTones = results2;
+
+                    let returnObj = {
+                        churchTones: churchTones,
+                        allTones: allTones
+                    }
+
+                    resolve(returnObj);
+                }).catch((error) => {
+                    reject(error);
+                })
+            }).catch((error) => {
+                reject(error);
             })
         })
     }

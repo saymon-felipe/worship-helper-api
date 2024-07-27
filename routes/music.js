@@ -55,8 +55,8 @@ router.get("/", login, (req, res, next) => {
     })
 })
 
-router.get("/retorna_musica/:music_id", login, (req, res, next) => {
-    _musicService.returnMusic(req.params.music_id).then((results) => {
+router.post("/retorna_musica/:music_id", login, (req, res, next) => {
+    _musicService.returnMusic(req.params.music_id, req.body.event_id).then((results) => {
         let response = functions.createResponse("Retorno da música" + req.params.music_id, results, "GET", 200);
         return res.status(200).send(response);
     }).catch((error) => {

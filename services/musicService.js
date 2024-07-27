@@ -114,18 +114,31 @@ let musicService = {
             })
         })
     },
-    returnMusic: function (music_id) {
+    returnMusic: function (music_id, event_id = 0) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(
                 `
                     SELECT
-                        m.*
+                        m.*,
+                        (
+                            SELECT
+                                t.nome
+                            FROM
+                                tons t
+                            INNER JOIN
+                                musicas_eventos me
+                            ON
+                                me.tom = t.id
+                            WHERE
+                                me.id_musica = m.id_musica
+                        ) AS tom
                     FROM
                         musicas m
                     WHERE
                         m.id_musica = ?
                 `, [music_id]
             ).then((results) => {
+                console.log(results)
                 functions.returnFormattedMusics(results).then((results2) => {
                     resolve(results2[0]);
                 }).catch((error) => {
