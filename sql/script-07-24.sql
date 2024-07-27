@@ -97,5 +97,6 @@ create table tons_igreja (
 insert into versaodb (versao) values ("24.07.4");
 
 insert into lista_tags_musicas (id_tag_musicas, nome_tag) values (16, "Latina");
+alter table musicas modify column cifra_url varchar(500) not null;
 
 insert into versaodb (versao) values ("24.07.5");
