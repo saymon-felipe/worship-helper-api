@@ -504,7 +504,16 @@ let churchService = {
                                     musicas_eventos
                                     (id_musica, id_evento, tom)
                                 VALUES
-                                    (?, ?, ?)
+                                    (?, ?, ?);
+
+                                INSERT INTO tons_igreja (id_igreja, id_musica, id_tom)
+                                SELECT ${company_id}, ${event_musics[i].id}, ${event_musics[i].tone.id}
+                                FROM DUAL
+                                WHERE NOT EXISTS (
+                                    SELECT 1 
+                                    FROM tons_igreja 
+                                    WHERE id_igreja = ${company_id} AND id_musica = ${event_musics[i].id} AND id_tom = ${event_musics[i].tone.id}
+                                );
                             `, [event_musics[i].id, results.insertId, event_musics[i].tone.id]
                         )
                     )
