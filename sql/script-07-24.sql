@@ -99,4 +99,6 @@ insert into versaodb (versao) values ("24.07.4");
 insert into lista_tags_musicas (id_tag_musicas, nome_tag) values (16, "Latina");
 alter table musicas modify column cifra_url varchar(500) not null;
 
+CREATE INDEX idx_music_informations ON musicas (nome_musica, artista_musica);
+
 insert into versaodb (versao) values ("24.07.5");
