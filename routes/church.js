@@ -194,7 +194,6 @@ router.post("/permissao", login, (req, res, next) => {
         let response = functions.createResponse("Retorno das permissões", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
         return res.status(401).send(error);
     })
 })
@@ -209,7 +208,6 @@ router.post("/envia-convite", login, (req, res, next) => {
             let response = functions.createResponse("Convite enviado", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
-            console.log(error)
             return res.status(500).send(error);
         })
     }).catch((error) => {

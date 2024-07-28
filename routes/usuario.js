@@ -38,7 +38,6 @@ router.post("/minhas-igrejas", login, (req, res, next) => {
         let response = functions.createResponse("Retorno de todas as igrejas do usuario " + req.usuario.id_usuario, results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
         return res.status(500).send(error);
     })
 });
@@ -48,7 +47,6 @@ router.post('/cadastro', (req, res, next) => {
         let response = functions.createResponse("Usuário criado com sucesso", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
         return res.status(500).send(error);
     })
 });
@@ -58,7 +56,6 @@ router.post("/login", (req, res, next) => {
         let response = functions.createResponse("Autenticado com sucesso", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
         return res.status(500).send(error);
     })
 })

@@ -344,7 +344,6 @@ let churchService = {
                             id_igreja = ?
                     `, [user_id, company_id]
                 ).then((results) => {
-                    console.log(results)
                     if (results[0].count > 0) {
                         reject("Essa pessoa já tem um convite pendente");
                     } else {

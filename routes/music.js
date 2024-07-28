@@ -14,7 +14,6 @@ router.post("/procurar", login, (req, res, next) => {
         let response = functions.createResponse("Retorno dos videos encontrados para a música selecionada", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
         return res.status(500).send(error);
     })
 })
@@ -28,7 +27,6 @@ router.post("/procurar-cifra", login, (req, res, next) => {
         let response = functions.createResponse("Retorno das cifras encontradas no cifra club", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        console.log(error)
         return res.status(500).send(error);
     })
 })

@@ -69,8 +69,8 @@ let musicService = {
                     FROM
                         musicas
                     WHERE
-                        nome_musica LIKE "%?%"
-                `, [name]
+                        LOWER(nome_musica) = "${name.toLowerCase()}" AND LOWER(artista_musica) = "${artist.toLowerCase()}"
+                `, []
             ).then((results) => {
                 if (results.length > 0) {
                     reject("Música já cadastrada no banco de dados");
@@ -138,7 +138,6 @@ let musicService = {
                         m.id_musica = ?
                 `, [music_id]
             ).then((results) => {
-                console.log(results)
                 functions.returnFormattedMusics(results).then((results2) => {
                     resolve(results2[0]);
                 }).catch((error) => {
