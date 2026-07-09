@@ -197,7 +197,7 @@ let usuarioService = {
                     WHERE
                         id_igreja = ?
                     AND
-                        id_usuario = ?
+                        id_usuario_requisitado = ?
                 `, [company_id, user_id]
             ).then(() => {
                 resolve();

@@ -1,7 +1,4 @@
 const functions = require("../functions/functions.js");
-const multer = require("multer");
-const multerS3 = require('multer-s3');
-const aws = require('aws-sdk');
 const _permissions = require("../functions/permissions.js");
 
 let churchService = {
@@ -164,7 +161,7 @@ let churchService = {
                 let lista_funcoes = results.map((currentFunction) => {
                     return {
                         id_funcao: currentFunction.id_funcoes_igreja,
-                        id_igreja: currentFunction.id_funcoes_id_igreja,
+                        id_igreja: currentFunction.id_funcoes_igreja_id_igreja,
                         nome_funcao: currentFunction.nome_funcao
                     }
                 })

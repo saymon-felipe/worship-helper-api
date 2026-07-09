@@ -1,0 +1,59 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-worship_helper}
+      MYSQL_USER: ${MYSQL_USER:-worship}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-worship}
+    ports:
+      - "3306:3306"
+    volumes:
+      - worship-helper-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+    environment:
+      PORT: ${PORT:-3000}
+      MYSQL_HOST: db
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:-worship}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-worship}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-worship_helper}
+      JWT_KEY: ${JWT_KEY:-local-development-key}
+      APP_ADMINISTRATOR_EMAIL: ${APP_ADMINISTRATOR_EMAIL:-admin@example.com}
+      URL_API: ${URL_API:-http://localhost:3000}
+      URL_SITE: ${URL_SITE:-http://localhost:8080}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      YOUTUBE_DATA_API_KEY: ${YOUTUBE_DATA_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-nano}
+      DEBUG_CIFRA_SCRAPER: ${DEBUG_CIFRA_SCRAPER:-false}
+      ACCESS_KEY_ID: ${ACCESS_KEY_ID:-}
+      SECRET_ACCESS_KEY: ${SECRET_ACCESS_KEY:-}
+      REGION: ${REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-worship-helper-bucket}
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  front:
+    build:
+      context: ../worship-helper
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    ports:
+      - "${FRONT_PORT:-8081}:80"
+    depends_on:
+      - api
+
+volumes:
+  worship-helper-db:

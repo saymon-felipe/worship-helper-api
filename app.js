@@ -1,3 +1,4 @@
+require('./config/env');
 const express = require('express');
 const app = express();
 const morgan = require('morgan');
@@ -12,7 +13,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', process.env.URL_SITE);
+    res.header('Access-Control-Allow-Origin', process.env.URL_SITE || '*');
     res.header(
         "Access-Control-Allow-Headers", 
         "Content-type, Origin, X-Requested-With, Accept, Authorization"

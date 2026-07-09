@@ -5,6 +5,8 @@ const uploadConfig = require("../config/upload.js");
 const functions = require("../functions/functions.js");
 const _churchService = require("../services/churchService");
 const _permissions = require("../functions/permissions.js");
+const { validateBody, validateParams } = require("../middleware/validate");
+const schemas = require("../validations/churchSchemas");
 
 router.get("/listar-igrejas", login, (req, res, next) => {
     if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
@@ -19,7 +21,7 @@ router.get("/listar-igrejas", login, (req, res, next) => {
     })
 })
 
-router.post("/criar-tag", login, (req, res, next) => {
+router.post("/criar-tag", login, validateBody(schemas.tag), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -36,7 +38,7 @@ router.post("/criar-tag", login, (req, res, next) => {
     })
 })
 
-router.post("/deletar-tag", login, (req, res, next) => {
+router.post("/deletar-tag", login, validateBody(schemas.deleteTag), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -53,7 +55,7 @@ router.post("/deletar-tag", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna-tags", login, (req, res, next) => {
+router.post("/retorna-tags", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -70,7 +72,7 @@ router.post("/retorna-tags", login, (req, res, next) => {
     })
 })
 
-router.post("/criar-funcao", login, (req, res, next) => {
+router.post("/criar-funcao", login, validateBody(schemas.churchFunction), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -87,7 +89,7 @@ router.post("/criar-funcao", login, (req, res, next) => {
     })
 })
 
-router.post("/deletar-funcao", login, (req, res, next) => {
+router.post("/deletar-funcao", login, validateBody(schemas.deleteFunction), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -104,7 +106,7 @@ router.post("/deletar-funcao", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna-funcoes", login, (req, res, next) => {
+router.post("/retorna-funcoes", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -121,7 +123,7 @@ router.post("/retorna-funcoes", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna-igreja", login, (req, res, next) => {
+router.post("/retorna-igreja", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -138,8 +140,8 @@ router.post("/retorna-igreja", login, (req, res, next) => {
     })
 })
 
-router.post("/publicar-aviso", login, (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
         }
@@ -155,7 +157,7 @@ router.post("/publicar-aviso", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna-avisos", login, (req, res, next) => {
+router.post("/retorna-avisos", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -172,7 +174,7 @@ router.post("/retorna-avisos", login, (req, res, next) => {
     })
 })
 
-router.post("/curtir-aviso", login, (req, res, next) => {
+router.post("/curtir-aviso", login, validateBody(schemas.likeWarning), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -189,7 +191,7 @@ router.post("/curtir-aviso", login, (req, res, next) => {
     })
 })
 
-router.post("/permissao", login, (req, res, next) => {
+router.post("/permissao", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((results) => {
         let response = functions.createResponse("Retorno das permissões", results, "POST", 200);
         return res.status(200).send(response);
@@ -198,7 +200,7 @@ router.post("/permissao", login, (req, res, next) => {
     })
 })
 
-router.post("/envia-convite", login, (req, res, next) => {
+router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -215,7 +217,7 @@ router.post("/envia-convite", login, (req, res, next) => {
     })
 })
 
-router.post("/adicionar-funcao", login, (req, res, next) => {
+router.post("/adicionar-funcao", login, validateBody(schemas.addFunction), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -233,7 +235,7 @@ router.post("/adicionar-funcao", login, (req, res, next) => {
     })
 })
 
-router.post("/remover-membro", login, (req, res, next) => {
+router.post("/remover-membro", login, validateBody(schemas.removeMember), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (req.body.id_usuario == req.usuario.id_usuario) {
             let response = functions.createResponse("Você não pode sair da igreja que você é o dono", null, "POST", 401);
@@ -256,7 +258,7 @@ router.post("/remover-membro", login, (req, res, next) => {
     })
 })
 
-router.post("/cadastrar-igreja", login, (req, res, next) => {
+router.post("/cadastrar-igreja", login, validateBody(schemas.createChurch), (req, res, next) => {
     if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
         let response = functions.createResponse("Você não tem autorização para cadastrar uma igreja", null, "POST", 401);
 
@@ -293,7 +295,7 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
     })
 });
 
-router.post("/cadastrar-evento", login, (req, res, next) => {
+router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
@@ -310,7 +312,7 @@ router.post("/cadastrar-evento", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna-eventos", login, (req, res, next) => {
+router.post("/retorna-eventos", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -327,7 +329,7 @@ router.post("/retorna-eventos", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna-evento/:id_evento", login, (req, res, next) => {
+router.post("/retorna-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
             return res.status(401).send("Acesso negado");
@@ -344,7 +346,7 @@ router.post("/retorna-evento/:id_evento", login, (req, res, next) => {
     })
 })
 
-router.post("/tons_de_musica/:id_musica", login, (req, res, next) => {
+router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicParams), validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");

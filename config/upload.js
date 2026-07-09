@@ -1,15 +1,16 @@
-const aws = require('aws-sdk');
+const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const multerS3 = require('multer-s3');
 const multer = require('multer');
-const util = require('util');
 
-aws.config.update({
-    accessKeyId: process.env.ACCESS_KEY_ID,
-    secretAccessKey: process.env.SECRET_ACCESS_KEY,
-    region: process.env.REGION 
+const bucket = process.env.S3_BUCKET || 'worship-helper-bucket';
+
+const s3 = new S3Client({
+    region: process.env.REGION,
+    credentials: {
+        accessKeyId: process.env.ACCESS_KEY_ID,
+        secretAccessKey: process.env.SECRET_ACCESS_KEY
+    }
 });
-
-const s3 = new aws.S3();
 
 const fileFilter = (req, file, cb) => {
     if (file.mimetype === "image/jpeg" || file.mimetype === 'image/jpg' || file.mimetype === 'image/png') {
@@ -23,7 +24,7 @@ let uploadConfig = {
     upload: multer({
         storage: multerS3({
             s3,
-            bucket: 'worship-helper-bucket',
+            bucket,
             acl: 'public-read',
             key(req, file, cb) {
                 let fileName = new Date().toISOString() + file.originalname;
@@ -36,7 +37,7 @@ let uploadConfig = {
         fileFilter: fileFilter
     }),
     deleteFromS3: async function (attachmentId) {
-        return s3.deleteObject({ Bucket: "worship-helper-bucket", Key: attachmentId }).promise();
+        return s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: attachmentId }));
     }
 }
 
