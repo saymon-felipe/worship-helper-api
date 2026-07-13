@@ -100,5 +100,18 @@ router.get("/tags", login, (req, res, next) => {
     })
 })
 
+router.delete("/:music_id", login, validateParams(schemas.musicParams), (req, res, next) => {
+    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
+        return res.status(401).send({ message: "Voce nao tem autorizacao para excluir musicas" });
+    }
+
+    _musicService.deleteMusic(req.params.music_id).then(() => {
+        let response = functions.createResponse("Musica excluida com sucesso", null, "DELETE", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error.message || error);
+    })
+})
+
 module.exports = router;
 

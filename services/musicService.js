@@ -423,6 +423,37 @@ let musicService = {
                 reject(error);
             })
         })
+    },
+    deleteMusic: async function (music_id) {
+        // Exclui curtidas dos comentários da música
+        await functions.executeSQL(
+            `DELETE FROM curtidas_comentarios_musicas WHERE id_comentario IN (SELECT id FROM comentarios_musica WHERE id_musica = ?)`
+            , [music_id]
+        );
+        // Exclui os comentários da música
+        await functions.executeSQL(
+            `DELETE FROM comentarios_musica WHERE id_musica = ?`
+            , [music_id]
+        );
+        // Exclui vínculos da música com eventos
+        await functions.executeSQL(
+            `DELETE FROM musicas_eventos WHERE id_musica = ?`
+            , [music_id]
+        );
+        // Exclui as tags da música
+        await functions.executeSQL(
+            `DELETE FROM tags_de_musicas WHERE tag_id_musica = ?`
+            , [music_id]
+        );
+        // Exclui a música
+        const result = await functions.executeSQL(
+            `DELETE FROM musicas WHERE id_musica = ?`
+            , [music_id]
+        );
+        
+        if (result.affectedRows === 0) {
+            throw new Error("Música não encontrada ou já excluída");
+        }
     }
 }
 
