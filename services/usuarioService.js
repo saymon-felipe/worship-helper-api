@@ -218,30 +218,39 @@ let usuarioService = {
             })
         })
     },
-    acceptInvite: function (company_id, user_id) {
-        return new Promise((resolve, reject) => {
-            functions.executeSQL(
-                `
-                    UPDATE 
-                        convites_membros_igreja
-                    SET
-                        data_confirmacao = current_timestamp()
-                    WHERE
-                        id_igreja = ?
-                    AND
-                        id_usuario_requisitado = ?
-                    AND
-                        data_confirmacao IS NULL
-                `, [company_id, user_id]
-            ).then(() => {
-                _churchService.addMember(company_id, user_id).then(() => {
-                    resolve();
-                })
-            })
-            .catch((error) => {
-                reject(error);
-            })
-        })
+    acceptInvite: async function (company_id, user_id) {
+        const invites = await functions.executeSQL(
+            `
+                SELECT
+                    id
+                FROM
+                    convites_membros_igreja
+                WHERE
+                    id_igreja = ?
+                AND
+                    id_usuario_requisitado = ?
+                AND
+                    data_confirmacao IS NULL
+                LIMIT 1
+            `,
+            [company_id, user_id]
+        );
+
+        if (invites.length <= 0) {
+            throw "Convite não encontrado";
+        }
+
+        await _churchService.addMember(company_id, user_id);
+
+        await functions.executeSQL(
+            `
+                DELETE FROM
+                    convites_membros_igreja
+                WHERE
+                    id = ?
+            `,
+            [invites[0].id]
+        );
     },
     returnInvites: function (user_id) {
         return new Promise((resolve, reject) => {

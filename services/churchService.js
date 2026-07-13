@@ -1,5 +1,6 @@
 const functions = require("../functions/functions.js");
 const _permissions = require("../functions/permissions.js");
+const _emailService = require("./emailService");
 
 let churchService = {
     returnChurches: function () {
@@ -374,51 +375,159 @@ let churchService = {
             })
         })
     },
-    sendInvite: function (company_id, user_id, requesting_user_id) {
-        return new Promise((resolve, reject) => {
-            if (user_id == requesting_user_id) {
-                reject("Você não pode se auto convidar para entrar em uma igreja");
+    sendInvite: async function (company_id, user_id, requesting_user_id, email_usuario = "") {
+        const normalizedEmail = String(email_usuario || "").trim().toLowerCase();
+        const requestedUserId = user_id ? Number(user_id) : null;
+
+        if (!requestedUserId && !normalizedEmail) {
+            throw "Selecione um usuario ou informe um e-mail valido";
+        }
+
+        if (requestedUserId && requestedUserId == requesting_user_id) {
+            throw "Voce nao pode se auto convidar para entrar em uma igreja";
+        }
+
+        if (requestedUserId) {
+            try {
+                await _permissions.isMember(requestedUserId, company_id);
+                throw "Voce nao pode enviar um convite para quem ja e membro";
+            } catch (error) {
+                if (error === "Voce nao pode enviar um convite para quem ja e membro") {
+                    throw error;
+                }
+            }
+        }
+
+        const pendingResults = await functions.executeSQL(
+            `
+                SELECT
+                    count(id) AS count
+                FROM
+                    convites_membros_igreja
+                WHERE
+                    id_igreja = ?
+                AND
+                    data_confirmacao IS NULL
+                AND
+                    (
+                        (? IS NOT NULL AND id_usuario_requisitado = ?)
+                    OR
+                        (? <> '' AND LOWER(email_usuario_requisitado) = ?)
+                    )
+            `,
+            [company_id, requestedUserId, requestedUserId, normalizedEmail, normalizedEmail]
+        );
+
+        if (pendingResults[0].count > 0) {
+            throw "Essa pessoa ja tem um convite pendente";
+        }
+
+        const results = await functions.executeSQL(
+            `
+                INSERT INTO
+                    convites_membros_igreja
+                    (id_igreja, id_usuario_requisitado, email_usuario_requisitado, id_usuario_requisitante)
+                VALUES
+                    (?, ?, ?, ?)
+            `,
+            [company_id, requestedUserId, requestedUserId ? null : normalizedEmail, requesting_user_id]
+        );
+
+        if (results.affectedRows <= 0) {
+            throw "Ocorreu um erro ao enviar o convite";
+        }
+
+        // Fetch church name and inviter name to send the email
+        try {
+            const [churchInfo, inviterInfo] = await Promise.all([
+                functions.executeSQL(`SELECT nome_igreja FROM igreja WHERE id_igreja = ?`, [company_id]),
+                functions.executeSQL(`SELECT nome_usuario FROM usuario WHERE id_usuario = ?`, [requesting_user_id])
+            ]);
+
+            const churchName = churchInfo[0] ? churchInfo[0].nome_igreja : "Igreja";
+            const inviterName = inviterInfo[0] ? inviterInfo[0].nome_usuario : "Líder";
+
+            let targetEmail = normalizedEmail;
+            if (requestedUserId) {
+                const userInfo = await functions.executeSQL(`SELECT email_usuario FROM usuario WHERE id_usuario = ?`, [requestedUserId]);
+                if (userInfo[0]) {
+                    targetEmail = userInfo[0].email_usuario;
+                }
             }
 
-            _permissions.isMember(user_id, company_id).then(() => {
-                reject("Você não pode enviar um convite para quem já é membro");
-            }).catch(() => {
-                functions.executeSQL(
-                    `
-                        SELECT
-                            count(id) AS count
-                        FROM
-                            convites_membros_igreja
-                        WHERE
-                            id_usuario_requisitado = ?
-                        AND
-                            id_igreja = ?
-                    `, [user_id, company_id]
-                ).then((results) => {
-                    if (results[0].count > 0) {
-                        reject("Essa pessoa já tem um convite pendente");
-                    } else {
-                        functions.executeSQL(
-                            `
-                                INSERT INTO
-                                    convites_membros_igreja
-                                    (id_igreja, id_usuario_requisitado, id_usuario_requisitante)
-                                VALUES
-                                    (?, ?, ?)
-                            `, [company_id, user_id, requesting_user_id]
-                        ).then((results) => {
-                            if (results.affectedRows <= 0) {
-                                reject("Ocorreu um erro ao enviar o convite");
-                            }
-        
-                            resolve();
-                        }).catch((error) => {
-                            reject(error);
-                        })
-                    }
-                })
-            })
-        })
+            if (targetEmail) {
+                console.log(`[CHURCH_SERVICE] Iniciando disparo assíncrono de convite por email para: ${targetEmail}`);
+                await _emailService.sendChurchInvite({
+                    to: targetEmail,
+                    churchName,
+                    inviterName
+                });
+                console.log(`[CHURCH_SERVICE] Disparo concluído com sucesso para: ${targetEmail}`);
+            } else {
+                console.warn(`[CHURCH_SERVICE] Nenhum email encontrado para o convite (id_usuario: ${requestedUserId})`);
+            }
+        } catch (emailErr) {
+            console.error("[CHURCH_SERVICE] Falha ao disparar email de convite:", emailErr);
+            // We do not throw the error here so that the database entry remains valid
+        }
+    },
+    returnPendingInvites: async function (company_id) {
+        const results = await functions.executeSQL(
+            `
+                SELECT
+                    cmi.id,
+                    cmi.id_usuario_requisitado,
+                    cmi.email_usuario_requisitado,
+                    cmi.data_criacao,
+                    u.nome_usuario,
+                    u.email_usuario,
+                    u.imagem_usuario
+                FROM
+                    convites_membros_igreja cmi
+                LEFT JOIN
+                    usuario u
+                ON
+                    u.id_usuario = cmi.id_usuario_requisitado
+                WHERE
+                    cmi.id_igreja = ?
+                AND
+                    cmi.data_confirmacao IS NULL
+                ORDER BY
+                    cmi.data_criacao DESC
+            `,
+            [company_id]
+        );
+
+        return results.map((invite) => {
+            return {
+                id: invite.id,
+                id_usuario: invite.id_usuario_requisitado,
+                nome_usuario: invite.nome_usuario,
+                email_usuario: invite.email_usuario || invite.email_usuario_requisitado,
+                imagem_usuario: invite.imagem_usuario,
+                cadastrado: Boolean(invite.id_usuario_requisitado),
+                data_criacao: invite.data_criacao
+            };
+        });
+    },
+    deleteInvite: async function (company_id, invite_id) {
+        const results = await functions.executeSQL(
+            `
+                DELETE FROM
+                    convites_membros_igreja
+                WHERE
+                    id_igreja = ?
+                AND
+                    id = ?
+                AND
+                    data_confirmacao IS NULL
+            `,
+            [company_id, invite_id]
+        );
+
+        if (results.affectedRows <= 0) {
+            throw "Convite nao encontrado";
+        }
     },
     addMember: function (company_id, user_id) {
         return new Promise((resolve, reject) => {

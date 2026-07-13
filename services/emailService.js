@@ -106,22 +106,35 @@ function createInviteHtml({ churchName, inviterName, inviteUrl }) {
 }
 
 async function sendChurchInvite({ to, churchName, inviterName }) {
+    console.log(`[EMAIL_SERVICE] Iniciando envio de convite para: ${to}`);
     const transportConfig = getTransportConfig();
 
     if (!transportConfig) {
+        console.error("[EMAIL_SERVICE] Configuração de transporte SMTP vazia (USER/PASS ausente).");
         throw new Error("Configuração de e-mail não encontrada");
     }
 
-    const transporter = nodemailer.createTransport(transportConfig);
-    const inviteUrl = `${getFrontendUrl()}/register?email=${encodeURIComponent(to)}&invite=church`;
+    console.log(`[EMAIL_SERVICE] Configurações de SMTP encontradas. Provedor/Host: ${transportConfig.host || transportConfig.service}`);
 
-    await transporter.sendMail({
-        from: `"Worship Helper" <${getMailUser().trim()}>`,
-        to,
-        subject: `Convite para participar da igreja ${churchName}`,
-        html: createInviteHtml({ churchName, inviterName, inviteUrl }),
-        text: `${inviterName} convidou você para participar da igreja ${churchName} no Worship Helper. Crie sua conta: ${inviteUrl}`
-    });
+    try {
+        const transporter = nodemailer.createTransport(transportConfig);
+        const inviteUrl = `${getFrontendUrl()}/register?email=${encodeURIComponent(to)}&invite=church`;
+
+        console.log(`[EMAIL_SERVICE] Link de convite gerado: ${inviteUrl}`);
+
+        const info = await transporter.sendMail({
+            from: `"Worship Helper" <${getMailUser().trim()}>`,
+            to,
+            subject: `Convite para participar da igreja ${churchName}`,
+            html: createInviteHtml({ churchName, inviterName, inviteUrl }),
+            text: `${inviterName} convidou você para participar da igreja ${churchName} no Worship Helper. Crie sua conta: ${inviteUrl}`
+        });
+
+        console.log(`[EMAIL_SERVICE] E-mail enviado com sucesso! MessageID: ${info.messageId}`);
+    } catch (error) {
+        console.error(`[EMAIL_SERVICE] Falha crítica ao enviar e-mail via transporter:`, error);
+        throw error;
+    }
 }
 
 module.exports = {
