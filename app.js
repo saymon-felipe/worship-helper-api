@@ -3,6 +3,7 @@ const express = require('express');
 const app = express();
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
+const { cacheGetResponses, clearCacheOnMutation } = require('./middleware/cache');
 
 const rotaUsuarios = require('./routes/usuario');
 const rotaIgreja = require('./routes/church');
@@ -26,6 +27,9 @@ app.use((req, res, next) => {
 
     next(); 
 })
+
+app.use(cacheGetResponses);
+app.use(clearCacheOnMutation);
 
 app.use('/usuario', rotaUsuarios);
 app.use('/igreja', rotaIgreja);

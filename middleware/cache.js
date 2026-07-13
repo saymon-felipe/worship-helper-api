@@ -5,11 +5,11 @@ const responseCache = new NodeCache({
     checkperiod: Number(process.env.GET_CACHE_CHECK_SECONDS || 120),
     useClones: false
 });
-const cachedPrefixes = ["/usuario", "/igreja", "/musicas"];
 const readOnlyPostPaths = [
     /^\/usuario\/minhas-igrejas$/,
     /^\/usuario\/find_users$/,
     /^\/usuario\/check_jwt$/,
+    /^\/usuario\/refresh_jwt$/,
     /^\/igreja\/retorna-/,
     /^\/igreja\/ultimo-aviso$/,
     /^\/igreja\/permissao$/,
@@ -20,7 +20,7 @@ const readOnlyPostPaths = [
     /^\/musicas\/comentarios\/retorna$/
 ];
 function routeCanBeCached(req) {
-    return req.method === "GET" && cachedPrefixes.some((prefix) => req.path.startsWith(prefix));
+    return req.method === "GET" && !req.path.startsWith("/public");
 }
 function getUserScope(req) {
     const authorization = req.headers.authorization || "";

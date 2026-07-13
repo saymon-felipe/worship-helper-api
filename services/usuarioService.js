@@ -4,6 +4,19 @@ const jwt = require('jsonwebtoken');
 const _churchService = require("./churchService.js");
 const uploadConfig = require("../config/upload.js");
 
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+
+function createUserToken(user) {
+    return jwt.sign({
+        id_usuario: user.id_usuario,
+        nome_usuario: user.nome_usuario,
+        email_usuario: user.email_usuario,
+        app_owner: Boolean(user.app_owner)
+    }, process.env.JWT_KEY, {
+        expiresIn: JWT_EXPIRES_IN
+    });
+}
+
 let usuarioService = {
     returnUser: function (user_id) {
         return new Promise((resolve, reject) => {
@@ -16,6 +29,7 @@ let usuarioService = {
                 let usuario = {
                     id_usuario: results[0].id_usuario,
                     nome_usuario: results[0].nome_usuario,
+                    email_usuario: results[0].email_usuario,
                     descricao_usuario: results[0].descricao_usuario,
                     imagem_usuario: results[0].imagem_usuario,
                     app_owner: results[0].app_owner
@@ -164,23 +178,19 @@ let usuarioService = {
             functions.executeSQL('SELECT * FROM usuario WHERE email_usuario = ?', [user_email]).then((results) => {
                 if (results.length < 1) {
                     reject("Falha na autenticação");
+                    return;
                 }
 
                 bcrypt.compare(user_password.toString(), results[0].senha_usuario, (errBcrypt, resultBcrypt) => {
                     if (errBcrypt) {
                         reject(errBcrypt);
+                        return;
                     }
 
                     if (resultBcrypt) {
-                        const token = jwt.sign({
-                            id_usuario: results[0].id_usuario,
-                            nome_usuario: results[0].nome_usuario,
-                            email_usuario: results[0].email_usuario
-                        }, process.env.JWT_KEY, {
-                            expiresIn: "8h"
-                        })
-
-                        resolve(token);
+                        resolve(createUserToken(results[0]));
+                    } else {
+                        reject("Falha na autenticação");
                     }
                 })
             })
@@ -424,28 +434,17 @@ let usuarioService = {
             })
         })
     },
-    checkJwt: function (user_id, tokenParam) {
+    refreshJwt: function (user_id) {
         return new Promise((resolve, reject) => {
             functions.executeSQL("SELECT * FROM usuario WHERE id_usuario = ?",
             [user_id])
             .then((results) => {
                 if (results.length <= 0) {
                     reject("Usuário não encontrado");
+                    return;
                 }
                 
-                let token = tokenParam.split(" ")[1];
-                jwt.verify(token, process.env.JWT_KEY, (err, decoded) => {
-                    if (err) {
-                        reject("Token inválido");
-                    } else {
-                        let newToken = jwt.sign({
-                            id_usuario: results[0].id_usuario,
-                            nome_usuario: results[0].nome_usuario,
-                            email_usuario: results[0].email_usuario
-                        }, process.env.JWT_KEY, {expiresIn: "8h"});
-                        resolve(newToken);
-                    }
-                })
+                resolve(createUserToken(results[0]));
             }).catch((error) => {
                 reject(error);
             })

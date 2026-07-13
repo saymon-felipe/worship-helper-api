@@ -6,10 +6,11 @@ const _musicService = require("../services/musicService");
 const ciphers = require("../functions/cyphers.js");
 const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/musicSchemas");
+const { requireAppAdministrator } = require("../functions/authClaims");
 
 router.post("/procurar", login, validateBody(schemas.search), (req, res, next) => {
-    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
-        return res.status(401).send({ message: "Voce nao tem autorizacao para buscar musicas" });
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
 
     _musicService.searchMusic(req.body.name, req.body.artist).then((results) => {
@@ -21,8 +22,8 @@ router.post("/procurar", login, validateBody(schemas.search), (req, res, next) =
 })
 
 router.post("/procurar-cifra", login, validateBody(schemas.search), (req, res, next) => {
-    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
-        return res.status(401).send({ message: "Voce nao tem autorizacao para cadastrar musicas" });
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
 
     ciphers.scrapeCifraClub(req.body.name, req.body.artist).then((results) => {
@@ -34,8 +35,8 @@ router.post("/procurar-cifra", login, validateBody(schemas.search), (req, res, n
 })
 
 router.post("/", login, validateBody(schemas.create), (req, res, next) => {
-    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
-        return res.status(401).send({ message: "Voce nao tem autorizacao para cadastrar musicas" });
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
 
     _musicService.createMusic(req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(() => {
@@ -101,8 +102,8 @@ router.get("/tags", login, (req, res, next) => {
 })
 
 router.delete("/:music_id", login, validateParams(schemas.musicParams), (req, res, next) => {
-    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
-        return res.status(401).send({ message: "Voce nao tem autorizacao para excluir musicas" });
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
 
     _musicService.deleteMusic(req.params.music_id).then(() => {

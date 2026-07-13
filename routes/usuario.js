@@ -4,8 +4,10 @@ const login = require("../middleware/login");
 const _usuarioService = require("../services/usuarioService");
 const uploadConfig = require("../config/upload.js");
 const functions = require("../functions/functions.js");
+const _permissions = require("../functions/permissions.js");
 const { validateBody } = require("../middleware/validate");
 const schemas = require("../validations/usuarioSchemas");
+const { requireAppAdministrator } = require("../functions/authClaims");
 router.get("/return_user", login, (req, res, next) => {
     _usuarioService.returnUser(req.usuario.id_usuario).then((results) => {
         let response = functions.createResponse("Retorno do usuário " + results.id_usuario, results, "GET", 200);
@@ -15,12 +17,12 @@ router.get("/return_user", login, (req, res, next) => {
     })
 })
 router.post("/app_administrator", login, (req, res, next) => {
-    if (req.usuario.email_usuario == process.env.APP_ADMINISTRATOR_EMAIL) {
-        let response = functions.createResponse("Acesso liberado", null, "GET", 200);
-        return res.status(200).send(response);
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
-    let response = functions.createResponse("Acesso negado", null, "POST", 403);
-    return res.status(403).send(response);
+
+    let response = functions.createResponse("Acesso liberado", null, "GET", 200);
+    return res.status(200).send(response);
 })
 router.post("/find_users", validateBody(schemas.findUsers), (req, res, next) => {
     _usuarioService.findUsers(req.body.search).then((results) => {
@@ -106,23 +108,50 @@ router.patch("/update_image", login, uploadConfig.upload.single('imagem_usuario'
     })
 });
 router.post("/altera-tag", login, validateBody(schemas.changeTag), (req, res, next) => {
-    _usuarioService.changeTag(req.body.id_usuario, req.body.id_igreja, req.body.id_tag).then(() => {
-        let response = functions.createResponse("Tag adicionada com sucesso", null, "POST", 200);
-        return res.status(200).send(response);
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _usuarioService.changeTag(req.body.id_usuario, req.body.id_igreja, req.body.id_tag).then(() => {
+            let response = functions.createResponse("Tag adicionada com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
     }).catch((error) => {
-        return res.status(500).send(error);
+        return res.status(401).send(error);
     })
 })
 router.post("/altera-funcoes", login, validateBody(schemas.changeFunctions), (req, res, next) => {
-    _usuarioService.newFunctions(req.body.id_usuario, req.body.id_igreja, req.body.new_functions).then(() => {
-        let response = functions.createResponse("Funções adicionadas com sucesso", null, "POST", 200);
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _usuarioService.newFunctions(req.body.id_usuario, req.body.id_igreja, req.body.new_functions).then(() => {
+            let response = functions.createResponse("Funções adicionadas com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+router.post('/refresh_jwt', login, (req, res, next) => {
+    _usuarioService.refreshJwt(req.usuario.id_usuario).then((results) => {
+        let returnObj = {
+            newToken: results
+        }
+        let response = functions.createResponse("JWT renovado com sucesso", returnObj, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
     })
 })
 router.post('/check_jwt', login, validateBody(schemas.checkJwt), (req, res, next) => {
-    _usuarioService.checkJwt(req.usuario.id_usuario, req.body.token).then((results) => {
+    _usuarioService.refreshJwt(req.usuario.id_usuario).then((results) => {
         let returnObj = {
             newToken: results
         }
