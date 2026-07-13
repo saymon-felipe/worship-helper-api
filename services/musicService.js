@@ -344,6 +344,7 @@ let musicService = {
                         id_igreja: null,
                         mensagem: comment.mensagem,
                         data_criacao: comment.data_criacao,
+                        parent_id: comment.parent_id,
                         quantidade_curtidas: comment.quantidade_curtidas,
                         usuario_atual_curtiu: comment.current_user_liked,
                         criador: {
@@ -360,7 +361,7 @@ let musicService = {
             })
         })
     },
-    postMusicComment: function (message, user_id, music_id) {
+    postMusicComment: function (message, user_id, music_id, parent_id = null) {
         return new Promise((resolve, reject) => {
             if (message.length > 100) {
                 reject("Mensagem e muito grande, limite de 100 caracteres");
@@ -369,10 +370,10 @@ let musicService = {
             functions.executeSQL(`
                 INSERT INTO
                     comentarios_musica
-                    (id_musica, id_usuario, mensagem)
+                    (id_musica, id_usuario, mensagem, parent_id)
                 VALUES
-                    (?, ?, ?)
-            `, [music_id, user_id, message])
+                    (?, ?, ?, ?)
+            `, [music_id, user_id, message, parent_id])
             .then((results) => {
                 if (results.affectedRows <= 0) {
                     reject("Nao foi possivel publicar o comentario");

@@ -66,7 +66,7 @@ router.post("/retorna_musica/:music_id", login, validateParams(schemas.musicPara
 })
 
 router.post("/comentarios/criar", login, validateBody(schemas.createComment), (req, res, next) => {
-    _musicService.postMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica).then(() => {
+    _musicService.postMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.parent_id).then(() => {
         let response = functions.createResponse("Comentario criado com sucesso", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {

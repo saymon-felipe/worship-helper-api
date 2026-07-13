@@ -1,4 +1,4 @@
-﻿const functions = require("../functions/functions.js");
+const functions = require("../functions/functions.js");
 const _permissions = require("../functions/permissions.js");
 
 let churchService = {
@@ -211,7 +211,7 @@ let churchService = {
             })
         })
     },
-    postWarning: function (company_id, message, user_id) {
+    postWarning: function (company_id, message, user_id, parent_id = null) {
         return new Promise((resolve, reject) => {
             if (message.length > 100) {
                 reject("Mensagem é muito grande, limite de 100 caracteres");
@@ -220,16 +220,69 @@ let churchService = {
             functions.executeSQL(`
                 INSERT INTO
                     avisos_igreja
-                    (aviso_igreja_id_igreja, aviso_igreja_mensagem, aviso_igreja_id_criador, aviso_igreja_data_criacao)
+                    (aviso_igreja_id_igreja, aviso_igreja_mensagem, aviso_igreja_id_criador, aviso_igreja_parent_id, aviso_igreja_data_criacao)
                 VALUES
-                    (?, ?, ?, CURRENT_TIMESTAMP())
-            `, [company_id, message, user_id])
+                    (?, ?, ?, ?, CURRENT_TIMESTAMP())
+            `, [company_id, message, user_id, parent_id])
             .then((results) => {
                 if (results.affectedRows <= 0) {
                     reject("Não foi possível publicar o aviso");
                 }
 
                 resolve();
+            }).catch((error) => {
+                reject(error);
+            })
+        })
+    },
+    returnLatestWarning: function (user_id, company_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(`
+                SELECT
+                    ai.*,
+                    u.id_usuario,
+                    u.nome_usuario,
+                    u.imagem_usuario,
+                    (
+                        SELECT
+                            count(*)
+                        FROM
+                            avisos_igreja
+                        WHERE
+                            aviso_igreja_parent_id = ai.id_aviso_igreja
+                    ) as quantidade_respostas
+                FROM
+                    avisos_igreja ai
+                INNER JOIN
+                    usuario u
+                ON
+                    ai.aviso_igreja_id_criador = u.id_usuario
+                WHERE
+                    ai.aviso_igreja_id_igreja = ?
+                AND
+                    ai.aviso_igreja_parent_id IS NULL
+                ORDER BY
+                    ai.aviso_igreja_data_criacao DESC
+                LIMIT 1
+            `, [company_id])
+            .then((results) => {
+                if (results.length <= 0) {
+                    resolve(null);
+                    return;
+                }
+                const warning = results[0];
+                resolve({
+                    id_aviso: warning.id_aviso_igreja,
+                    id_igreja: warning.aviso_igreja_id_igreja,
+                    mensagem: warning.aviso_igreja_mensagem,
+                    data_criacao: warning.aviso_igreja_data_criacao,
+                    quantidade_respostas: warning.quantidade_respostas,
+                    criador: {
+                        id_usuario: warning.id_usuario,
+                        nome_usuario: warning.nome_usuario,
+                        imagem_usuario: warning.imagem_usuario
+                    }
+                });
             }).catch((error) => {
                 reject(error);
             })
@@ -282,6 +335,7 @@ let churchService = {
                         id_igreja: warning.aviso_igreja_id_igreja,
                         mensagem: warning.aviso_igreja_mensagem,
                         data_criacao: warning.aviso_igreja_data_criacao,
+                        parent_id: warning.aviso_igreja_parent_id,
                         quantidade_curtidas: warning.quantidade_curtidas,
                         usuario_atual_curtiu: warning.current_user_liked,
                         criador: {

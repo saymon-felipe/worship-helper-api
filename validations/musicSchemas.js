@@ -24,7 +24,8 @@ module.exports = {
     }),
     createComment: Joi.object({
         id_musica: id,
-        mensagem: text(100)
+        mensagem: text(100),
+        parent_id: Joi.number().integer().min(1).optional().allow(null)
     }),
     returnComments: Joi.object({
         id_musica: id

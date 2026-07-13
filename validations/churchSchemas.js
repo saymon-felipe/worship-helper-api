@@ -34,7 +34,8 @@ module.exports = {
     }),
     warning: Joi.object({
         id_igreja: id,
-        mensagem: text(100)
+        mensagem: text(100),
+        parent_id: Joi.number().integer().min(1).optional().allow(null)
     }),
     likeWarning: Joi.object({
         id_igreja: id,
