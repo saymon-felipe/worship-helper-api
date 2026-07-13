@@ -1,63 +1,61 @@
 const functions = require("./functions");
 
 let permissions = {
-    checkPermission: function (id_usuario, id_igreja) {
-        return new Promise((resolve, reject) => {
-            let self = this;
+    checkPermission: async function (id_usuario, id_igreja) {
+        const results = await functions.executeSQL(`
+            SELECT
+                CASE WHEN
+                    ? = i.usuario_administrador OR u.app_owner = 1 THEN true
+                ELSE
+                    false
+                END as administrador
+            FROM
+                igreja i
+            LEFT JOIN
+                usuario u
+            ON
+                u.id_usuario = ?
+            WHERE
+                i.id_igreja = ?`,
+            [id_usuario, id_usuario, id_igreja]);
 
-            functions.executeSQL(`
-                SELECT
-                    CASE WHEN 
-                        ? = usuario_administrador THEN true
-                    ELSE 
-                        false
-                    END as administrador
-                FROM
-                    igreja
-                WHERE
-                    id_igreja = ?`,
-                [id_usuario, id_igreja])
-            .then((results) => {
-                let administrador = false;
-                let apenas_membro = true;
+        if (results.length <= 0) {
+            throw "Permissão negada";
+        }
 
-                if (results[0].administrador > 0) {
-                    administrador = true;
-                } else {
-                    self.isMember(id_usuario, id_igreja).then().catch(() => {
-                        apenas_membro = false;
-                    })
-                }
+        const administrador = results[0].administrador > 0;
+        if (administrador) {
+            return {
+                administrador: true,
+                apenas_membro: false
+            };
+        }
 
-                if (!administrador && !apenas_membro) {
-                    reject("Permissão negada");
-                }
+        try {
+            await this.isMember(id_usuario, id_igreja);
+        } catch {
+            throw "Permissão negada";
+        }
 
-                let retorno = {
-                    administrador: administrador,
-                    apenas_membro: apenas_membro
-                }
-
-                resolve(retorno);
-            })
-            .catch((error) => {
-                reject(error);
-            })
-        })
+        return {
+            administrador: false,
+            apenas_membro: true
+        };
     },
     isMember: function (id_usuario, id_igreja) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(`
-                SELECT 
+                SELECT
                     count(id) AS count
                 FROM
                     membros_igreja
-                WHERE 
+                WHERE
                     id_igreja = ? AND id_usuario = ?`,
                 [id_igreja, id_usuario])
             .then((results) => {
                 if (results[0].count == 0) {
                     reject("Você não é membro desta igreja");
+                    return;
                 }
 
                 resolve();

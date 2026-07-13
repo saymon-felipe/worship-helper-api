@@ -98,7 +98,7 @@ let usuarioService = {
                 AND
                     membros_igreja.id_usuario = ?
             `, 
-            [user_id, user_id, user_id])
+            [user_id, user_id])
             .then((results) => {
                 
                 let lista_igrejas = results.map(igreja => {
@@ -108,7 +108,7 @@ let usuarioService = {
                         imagem_igreja: igreja.imagem_igreja,
                         membros: [],
                         quantidade_membros: 0,
-                        administrador: igreja.usuario_administrador
+                        administrador: igreja.administrador
                     }
                 })
 

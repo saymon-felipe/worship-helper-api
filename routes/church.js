@@ -167,6 +167,23 @@ router.post("/retorna-igreja", login, validateBody(schemas.churchId), (req, res,
     })
 })
 
+router.post("/retorna-membros", login, validateBody(schemas.churchId), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador && !permission.apenas_membro) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.returnChurchMembers(req.body.id_igreja).then((results) => {
+            let response = functions.createResponse("Retorno dos membros da igreja " + req.body.id_igreja, results.object, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
 router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !req.body.parent_id) {
