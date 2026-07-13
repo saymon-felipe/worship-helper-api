@@ -1,4 +1,4 @@
-const functions = require("../functions/functions.js");
+﻿const functions = require("../functions/functions.js");
 const _permissions = require("../functions/permissions.js");
 
 let churchService = {
@@ -745,7 +745,54 @@ let churchService = {
                 reject(error);
             })
         })
+    },
+    deleteChurch: function (company_id) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    DELETE FROM
+                        membros_eventos
+                    WHERE
+                        id_evento IN (SELECT id FROM eventos WHERE id_igreja = ?)
+                `, [company_id]
+            ).then(() => {
+                functions.executeSQL(
+                    `
+                        DELETE FROM
+                            igreja
+                        WHERE
+                            id_igreja = ?
+                    `, [company_id]
+                ).then((results) => {
+                    resolve(results);
+                }).catch((error) => {
+                    reject(error);
+                })
+            }).catch((error) => {
+                reject(error);
+            })
+        })
+    },
+    updateChurch: function (company_id, name, image) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(
+                `
+                    UPDATE
+                        igreja
+                    SET
+                        nome_igreja = ?,
+                        imagem_igreja = ?
+                    WHERE
+                        id_igreja = ?
+                `, [name, image, company_id]
+            ).then((results) => {
+                resolve(results);
+            }).catch((error) => {
+                reject(error);
+            })
+        })
     }
 }
 
 module.exports = churchService;
+

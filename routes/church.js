@@ -7,10 +7,11 @@ const _churchService = require("../services/churchService");
 const _permissions = require("../functions/permissions.js");
 const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/churchSchemas");
+const { requireAppAdministrator } = require("../functions/authClaims");
 
 router.get("/listar-igrejas", login, (req, res, next) => {
-    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
-        return res.status(401).send({ message: "Você não tem autorização para listar as igrejas" });
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
 
     _churchService.returnChurches().then((results) => {
@@ -19,7 +20,33 @@ router.get("/listar-igrejas", login, (req, res, next) => {
     }).catch((error) => {
         return res.status(500).send(error);
     })
-})
+});
+
+router.post("/deletar-igreja", login, (req, res, next) => {
+    if (!requireAppAdministrator(req, res)) {
+        return;
+    }
+
+    _churchService.deleteChurch(req.body.id_igreja).then(() => {
+        let response = functions.createResponse("Igreja excluÃ­da com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error);
+    })
+});
+
+router.post("/atualizar-igreja", login, (req, res, next) => {
+    if (!requireAppAdministrator(req, res)) {
+        return;
+    }
+
+    _churchService.updateChurch(req.body.id_igreja, req.body.nome_igreja, req.body.imagem_igreja).then(() => {
+        let response = functions.createResponse("Igreja atualizada com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error);
+    })
+});
 
 router.post("/criar-tag", login, validateBody(schemas.tag), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
@@ -45,7 +72,7 @@ router.post("/deletar-tag", login, validateBody(schemas.deleteTag), (req, res, n
         }
 
         _churchService.deleteTag(req.body.id_igreja, req.body.id_tag).then(() => {
-            let response = functions.createResponse("Tag excluída com sucesso", null, "POST", 200);
+            let response = functions.createResponse("Tag excluÃ­da com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -79,7 +106,7 @@ router.post("/criar-funcao", login, validateBody(schemas.churchFunction), (req, 
         }
 
         _churchService.createFunction(req.body.id_igreja, req.body.nome).then(() => {
-            let response = functions.createResponse("Função criada com sucesso", null, "POST", 200);
+            let response = functions.createResponse("FunÃ§Ã£o criada com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -96,7 +123,7 @@ router.post("/deletar-funcao", login, validateBody(schemas.deleteFunction), (req
         }
 
         _churchService.deleteFunction(req.body.id_function, req.body.id_igreja).then(() => {
-            let response = functions.createResponse("Função removida com sucesso", null, "POST", 200);
+            let response = functions.createResponse("FunÃ§Ã£o removida com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -113,7 +140,7 @@ router.post("/retorna-funcoes", login, validateBody(schemas.churchId), (req, res
         }
         
         _churchService.returnFunctions(req.body.id_igreja).then((results) => {
-            let response = functions.createResponse("Retorno das funções da igreja " + req.body.id_igreja, results, "POST", 200);
+            let response = functions.createResponse("Retorno das funÃ§Ãµes da igreja " + req.body.id_igreja, results, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -142,12 +169,29 @@ router.post("/retorna-igreja", login, validateBody(schemas.churchId), (req, res,
 
 router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!permission.administrador && !req.body.parent_id) {
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario).then(() => {
+        _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario, req.body.parent_id).then(() => {
             let response = functions.createResponse("Aviso criado com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/ultimo-aviso", login, validateBody(schemas.churchId), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador && !permission.apenas_membro) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.returnLatestWarning(req.usuario.id_usuario, req.body.id_igreja).then((results) => {
+            let response = functions.createResponse("Retorno do Ãºltimo aviso da igreja", results, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -193,7 +237,7 @@ router.post("/curtir-aviso", login, validateBody(schemas.likeWarning), (req, res
 
 router.post("/permissao", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((results) => {
-        let response = functions.createResponse("Retorno das permissões", results, "POST", 200);
+        let response = functions.createResponse("Retorno das permissÃµes", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(401).send(error);
@@ -206,8 +250,42 @@ router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res
             return res.status(401).send("Acesso negado");
         }
         
-        _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario).then(() => {
+        _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario, req.body.email_usuario).then(() => {
             let response = functions.createResponse("Convite enviado", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/retorna-convites-pendentes", login, validateBody(schemas.churchId), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.returnPendingInvites(req.body.id_igreja).then((results) => {
+            let response = functions.createResponse("Retorno dos convites pendentes", results, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/deletar-convite", login, validateBody(schemas.deleteInvite), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.deleteInvite(req.body.id_igreja, req.body.id_convite).then(() => {
+            let response = functions.createResponse("Convite cancelado com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -224,7 +302,7 @@ router.post("/adicionar-funcao", login, validateBody(schemas.addFunction), (req,
         }
 
         _churchService.addFunction(req.body.novaFuncao, req.body.id_igreja, req.usuario.id_usuario).then(() => {
-            let response = functions.createResponse("Função adicionada com sucesso", null, "POST", 200);
+            let response = functions.createResponse("FunÃ§Ã£o adicionada com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -238,7 +316,7 @@ router.post("/adicionar-funcao", login, validateBody(schemas.addFunction), (req,
 router.post("/remover-membro", login, validateBody(schemas.removeMember), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (req.body.id_usuario == req.usuario.id_usuario) {
-            let response = functions.createResponse("Você não pode sair da igreja que você é o dono", null, "POST", 401);
+            let response = functions.createResponse("VocÃª nÃ£o pode sair da igreja que vocÃª Ã© o dono", null, "POST", 401);
 
             return res.status(401).send(response);
         }
@@ -248,7 +326,7 @@ router.post("/remover-membro", login, validateBody(schemas.removeMember), (req, 
         }
 
         _churchService.removeMember(req.body.id_igreja, req.body.id_usuario).then(() => {
-            let response = functions.createResponse("Usuário removido com sucesso", null, "POST", 200);
+            let response = functions.createResponse("UsuÃ¡rio removido com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error2) => {
             return res.status(500).send(error2);
@@ -259,10 +337,8 @@ router.post("/remover-membro", login, validateBody(schemas.removeMember), (req, 
 })
 
 router.post("/cadastrar-igreja", login, validateBody(schemas.createChurch), (req, res, next) => {
-    if (req.usuario.email_usuario != process.env.APP_ADMINISTRATOR_EMAIL) {
-        let response = functions.createResponse("Você não tem autorização para cadastrar uma igreja", null, "POST", 401);
-
-        return res.status(401).send(response);
+    if (!requireAppAdministrator(req, res)) {
+        return;
     }
 
     _churchService.createChurch(req.body.nome_igreja, req.body.usuario_administrador, process.env.URL_API + "/public/church-default-image.jpg").then(() => {
@@ -275,7 +351,7 @@ router.post("/cadastrar-igreja", login, validateBody(schemas.createChurch), (req
 
 router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('church_image'), (req, res, next) => {
     if (req.file == undefined) {
-        let response = functions.createResponse("Tipo de arquivo não suportado", null, "POST", 500);
+        let response = functions.createResponse("Tipo de arquivo nÃ£o suportado", null, "POST", 500);
         return res.status(500).send(response);
     }
 
@@ -283,6 +359,15 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
         if (!permission.administrador) {
             return res.status(401).send("Acesso negado");
         }
+
+        // Busca a imagem antiga para excluir do S3
+        _churchService.returnChurch(req.params.id_igreja).then((churchObj) => {
+            const oldUrl = churchObj.imagem_igreja || "";
+            const oldKey = oldUrl.split("/").pop();
+            if (oldKey && !oldUrl.includes("church-default-image.jpg")) {
+                uploadConfig.deleteFromS3(oldKey).catch(e => console.log("Erro ao deletar imagem antiga do S3:", e));
+            }
+        }).catch(e => console.log("Erro ao buscar dados da igreja antiga:", e));
 
         _churchService.changeChurchImage(req.params.id_igreja, req.file.location).then(() => {
             let response = functions.createResponse("Imagem da igreja alterada com sucesso", null, "PATCH", 200);
@@ -353,7 +438,7 @@ router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicPar
         }
 
         _churchService.returnTones(req.params.id_musica, req.body.id_igreja).then((results) => {
-            let response = functions.createResponse("Retorno dos tons disponíveis e tons salvos da igreja", results, "POST", 200);
+            let response = functions.createResponse("Retorno dos tons disponÃ­veis e tons salvos da igreja", results, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -363,3 +448,5 @@ router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicPar
     })
 })
 module.exports = router;
+
+

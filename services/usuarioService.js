@@ -2,6 +2,7 @@ const functions = require("../functions/functions.js");
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const _churchService = require("./churchService.js");
+const uploadConfig = require("../config/upload.js");
 
 let usuarioService = {
     returnUser: function (user_id) {
@@ -329,7 +330,7 @@ let usuarioService = {
                 if (results.changedRows != 0) {
                     resolve();
                 } else {
-                    reject("Nenhum usuario com esse id");
+                    reject("Nenhum usuário com esse id");
                 }
             })
             .catch((error) => {
@@ -442,7 +443,6 @@ let usuarioService = {
                             nome_usuario: results[0].nome_usuario,
                             email_usuario: results[0].email_usuario
                         }, process.env.JWT_KEY, {expiresIn: "8h"});
-
                         resolve(newToken);
                     }
                 })

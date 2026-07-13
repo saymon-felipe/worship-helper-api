@@ -39,7 +39,7 @@ function debugLog(label, payload) {
 
 function truncateForLog(value = "", limit = TEXT_LOG_LIMIT) {
     const normalized = String(value).replace(/\s+/g, " ").trim();
-    return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+    return normalized.length > limit ?`${normalized.slice(0, limit)}...` : normalized;
 }
 
 function extractResponseText(response) {
@@ -97,7 +97,7 @@ function decodeDuckDuckGoHref(rawHref = "") {
     try {
         const url = new URL(rawHref);
         const redirected = url.searchParams.get("uddg");
-        return redirected ? decodeURIComponent(redirected) : rawHref;
+        return redirected ?decodeURIComponent(redirected) : rawHref;
     } catch {
         return rawHref;
     }
@@ -112,6 +112,150 @@ function isRelevantCifraUrl(url) {
     }
 }
 
+function normalizeCipherText(value = "") {
+    return String(value)
+        .replace(/\r/g, "")
+        .replace(/\t/g, "    ")
+        .replace(/[ \u00a0]+$/gm, "")
+        .replace(/\n{4,}/g, "\n\n\n")
+        .trim();
+}
+
+function extractElementTextWithBreaks($, element) {
+    const clone = $(element).clone();
+    clone.find("br").replaceWith("\n");
+    return normalizeCipherText(clone.text());
+}
+
+function extractLyricsText($) {
+    const paragraphs = [];
+
+    $(".letra p").each((index, element) => {
+        const text = extractElementTextWithBreaks($, element);
+
+        if (text.length > 0) {
+            paragraphs.push(text);
+        }
+    });
+
+    if (paragraphs.length > 0) {
+        return normalizeCipherText(paragraphs.join("\n\n"));
+    }
+
+    const lyricsContainer = $(".letra").first();
+
+    if (lyricsContainer.length > 0) {
+        return extractElementTextWithBreaks($, lyricsContainer);
+    }
+
+    return "";
+}
+
+function extractPageTitle($) {
+    const selectors = [
+        ".cifra h1",
+        "main h1",
+        "article h1",
+        "h1",
+        "meta[property='og:title']",
+        "title"
+    ];
+
+    for (const selector of selectors) {
+        let title = "";
+        const element = $(selector).first();
+
+        if (selector.startsWith("meta")) {
+            title = element.attr("content") || "";
+        } else {
+            title = element.text();
+        }
+
+        title = compactText(title, 255);
+
+        if (title && title !== "Cifra Club") {
+            return title;
+        }
+    }
+
+    return "";
+}
+
+function assertCifraClubUrl(url) {
+    if (!isRelevantCifraUrl(url)) {
+        const error = new Error("URL de cifra inválida");
+        error.status = 400;
+        throw error;
+    }
+}
+
+async function fetchCifraPageHtml(url) {
+    assertCifraClubUrl(url);
+
+    const response = await fetch(url, {
+        headers: {
+            "user-agent": "Mozilla/5.0"
+        }
+    });
+
+    if (!response.ok) {
+        const error = new Error(`Cifra Club page request failed with status ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
+
+    return response.text();
+}
+
+function extractCipherFromHtml(html) {
+    const $ = cheerio.load(html);
+    const title = extractPageTitle($);
+    const candidates = [];
+    const selectors = [
+        ".cifra_cnt pre",
+        "[class*='cifra'] pre",
+        "[data-cy='cifra-content']",
+        "pre",
+        "article"
+    ];
+
+    for (const selector of selectors) {
+        $(selector).each((index, element) => {
+            const text = normalizeCipherText($(element).text());
+
+            if (text.length > 40) {
+                candidates.push({
+                    selector,
+                    text
+                });
+            }
+        });
+    }
+
+    const bestCandidate = candidates.sort((a, b) => b.text.length - a.text.length)[0];
+
+    if (bestCandidate) {
+        return {
+            title,
+            text: bestCandidate.text
+        };
+    }
+
+    const lyricsText = extractLyricsText($);
+
+    if (lyricsText.length > 40) {
+        return {
+            title,
+            text: lyricsText
+        };
+    }
+
+    return {
+        title,
+        text: ""
+    };
+}
+
 function scoreCandidate(candidate, keywords) {
     const haystack = normalizeText(`${candidate.title} ${candidate.snippet} ${candidate.href}`);
     let score = 0;
@@ -124,6 +268,10 @@ function scoreCandidate(candidate, keywords) {
 
     if (/\/tabs-|\/partituras\/|\/cifra\//.test(candidate.href)) {
         score += 2;
+    }
+
+    if (/\/letra\/?$/.test(candidate.href) || /letra da m[úu]sica/i.test(candidate.title)) {
+        score -= 1;
     }
 
     if (candidate.href.split("/").length > 4) {
@@ -280,7 +428,7 @@ async function rerankWithOpenAI(candidates, name, artist) {
                     content: [
                         {
                             type: "input_text",
-                            text: "Escolha apenas links do Cifra Club que provavelmente sejam cifras da musica pedida. Priorize a musica correta e descarte paginas genericas."
+                            text: "Escolha apenas links do Cifra Club que provavelmente sejam cifras da música pedida. Priorize a música correta e descarte páginas genéricas."
                         }
                     ]
                 },
@@ -289,7 +437,7 @@ async function rerankWithOpenAI(candidates, name, artist) {
                     content: [
                         {
                             type: "input_text",
-                            text: `Musica: ${name}\nArtista: ${artist}\nCandidatos:\n${serializedCandidates}`
+                            text: `Música: ${name}\nArtista: ${artist}\nCandidatos:\n${serializedCandidates}`
                         }
                     ]
                 }
@@ -316,11 +464,11 @@ async function rerankWithOpenAI(candidates, name, artist) {
             .filter((item) => item && item.href && item.title && validUrls.has(item.href))
             .slice(0, MAX_RESULTS);
 
-        debugLog("Itens escolhidos apos validacao", filteredItems);
+        debugLog("Itens escolhidos após validação", filteredItems);
 
         return filteredItems;
     } catch (error) {
-        console.warn("[Cyphers] Falha no rerank com OpenAI, usando heuristica:", error.message);
+        console.warn("[Cyphers] Falha no rerank com OpenAI, usando heurística:", error.message);
         debugLog("Erro detalhado no rerank", {
             message: error.message,
             stack: error.stack
@@ -352,7 +500,24 @@ let cyphers = {
         }
 
         return rerankWithOpenAI(candidates, name, artist);
+    },
+    scrapeCifraContent: async function (url) {
+        const html = await fetchCifraPageHtml(url);
+        const cipher = extractCipherFromHtml(html);
+
+        if (!cipher.text) {
+            const error = new Error("Não foi possível extrair o conteúdo da cifra");
+            error.status = 422;
+            throw error;
+        }
+
+        return {
+            sourceUrl: url,
+            title: cipher.title,
+            text: cipher.text
+        };
     }
 }
 
 module.exports = cyphers;
+

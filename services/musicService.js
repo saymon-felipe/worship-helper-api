@@ -1,4 +1,6 @@
+const zlib = require("zlib");
 const functions = require("../functions/functions.js");
+const ciphers = require("../functions/cyphers.js");
 
 const GOOGLE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 const GOOGLE_VIDEO_DETAILS_URL = "https://www.googleapis.com/youtube/v3/videos";
@@ -30,6 +32,40 @@ function parseDuration(isoDuration) {
     const seconds = Number(match[3] || 0);
 
     return (hours * 3600) + (minutes * 60) + seconds;
+}
+
+function extractYoutubeVideoId(videoUrl) {
+    try {
+        const url = new URL(videoUrl);
+
+        if (url.hostname.includes("youtu.be")) {
+            return url.pathname.replace("/", "");
+        }
+
+        return url.searchParams.get("v") || "";
+    } catch {
+        return "";
+    }
+}
+
+function compressCipherText(text) {
+    if (!text) {
+        return null;
+    }
+
+    return zlib.gzipSync(Buffer.from(text, "utf8"));
+}
+
+function decompressCipherText(content, encoding) {
+    if (!content) {
+        return "";
+    }
+
+    if (encoding === "gzip") {
+        return zlib.gunzipSync(content).toString("utf8");
+    }
+
+    return Buffer.from(content).toString("utf8");
 }
 
 async function requestYoutubeJson(url, params) {
@@ -160,41 +196,45 @@ let musicService = {
             })
         })
     },
-    createMusic: function (name, artist, video_url, cipher_url, thumbnail, music_tags) {
-        return new Promise((resolve, reject) => {
-            let self = this;
+    createMusic: async function (name, artist, video_url, cipher_url, cipher_title, thumbnail, music_tags) {
+        const results = await functions.executeSQL(
+            `
+                SELECT
+                    id_musica
+                FROM
+                    musicas
+                WHERE
+                    LOWER(nome_musica) = ? AND LOWER(artista_musica) = ?
+            `,
+            [name.toLowerCase(), artist.toLowerCase()]
+        );
 
-            functions.executeSQL(
-                `
-                    SELECT
-                        *
-                    FROM
-                        musicas
-                    WHERE
-                        LOWER(nome_musica) = "${name.toLowerCase()}" AND LOWER(artista_musica) = "${artist.toLowerCase()}"
-                `, []
-            ).then((results) => {
-                if (results.length > 0) {
-                    reject("Musica ja cadastrada no banco de dados");
-                } else {
-                    functions.executeSQL(
-                        `
-                            INSERT INTO
-                                musicas
-                                (nome_musica, artista_musica, video_url, cifra_url, imagem, video_id)
-                            VALUES
-                                (?, ?, ?, ?, ?, ?)
-                        `, [name, artist, video_url, cipher_url, thumbnail, video_url.split("?v=")[1]]
-                    ).then((results) => {
-                        self.insertMusicTags(results.insertId, music_tags).then(() => {
-                            resolve();
-                        })
-                    }).catch((error) => {
-                        reject(error);
-                    })
-                }
-            })
-        })
+        if (results.length > 0) {
+            throw "Musica ja cadastrada no banco de dados";
+        }
+
+        const videoId = extractYoutubeVideoId(video_url);
+
+        if (!videoId) {
+            throw "URL do video invalida";
+        }
+
+        const cipherContent = await ciphers.scrapeCifraContent(cipher_url);
+        const compressedCipher = compressCipherText(cipherContent.text);
+        const resolvedCipherTitle = cipher_title || cipherContent.title || "";
+
+        const inserted = await functions.executeSQL(
+            `
+                INSERT INTO
+                    musicas
+                    (nome_musica, artista_musica, video_url, cifra_url, cifra_titulo, cifra_conteudo, cifra_encoding, imagem, video_id)
+                VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [name, artist, video_url, cipher_url, resolvedCipherTitle, compressedCipher, "gzip", thumbnail, videoId]
+        );
+
+        await this.insertMusicTags(inserted.insertId, music_tags);
     },
     returnMusics: function () {
         return new Promise((resolve, reject) => {
@@ -233,14 +273,23 @@ let musicService = {
                                 me.tom = t.id
                             WHERE
                                 me.id_musica = m.id_musica
+                            AND
+                                (? = 0 OR me.id_evento = ?)
                         ) AS tom
                     FROM
                         musicas m
                     WHERE
                         m.id_musica = ?
-                `, [music_id]
+                `, [event_id, event_id, music_id]
             ).then((results) => {
                 functions.returnFormattedMusics(results).then((results2) => {
+                    if (!results2[0]) {
+                        resolve(results2[0]);
+                        return;
+                    }
+
+                    results2[0].cipher_text = decompressCipherText(results[0].cifra_conteudo, results[0].cifra_encoding);
+                    results2[0].cipher_title = results[0].cifra_titulo || "";
                     resolve(results2[0]);
                 }).catch((error) => {
                     reject(error);
@@ -378,3 +427,4 @@ let musicService = {
 }
 
 module.exports = musicService;
+

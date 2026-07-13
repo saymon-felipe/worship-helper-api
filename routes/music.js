@@ -38,11 +38,11 @@ router.post("/", login, validateBody(schemas.create), (req, res, next) => {
         return res.status(401).send({ message: "Voce nao tem autorizacao para cadastrar musicas" });
     }
 
-    _musicService.createMusic(req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.video_image, req.body.music_tags).then(() => {
+    _musicService.createMusic(req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(() => {
         let response = functions.createResponse("Musica cadastrada com sucesso no banco de dados", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        return res.status(500).send(error);
+        return res.status(error.status || 500).send(error.message || error);
     })
 })
 
@@ -101,3 +101,4 @@ router.get("/tags", login, (req, res, next) => {
 })
 
 module.exports = router;
+

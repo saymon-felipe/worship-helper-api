@@ -10,6 +10,7 @@ module.exports = {
         artist: text(50),
         video_url: Joi.string().trim().max(100).required(),
         cipher_url: Joi.string().trim().max(500).allow("").required(),
+        cipher_title: Joi.string().trim().max(255).allow("").default(""),
         video_image: Joi.string().trim().max(500).required(),
         music_tags: Joi.array().items(Joi.object({
             id
@@ -32,3 +33,4 @@ module.exports = {
         id_aviso: id
     })
 };
+
