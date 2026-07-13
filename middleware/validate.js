@@ -11,7 +11,7 @@ function validateBody(schema) {
 
         if (error) {
             return res.status(400).send({
-                message: "Payload invalido",
+                message: "Payload inválido",
                 error: formatJoiError(error)
             });
         }
@@ -30,7 +30,7 @@ function validateParams(schema) {
 
         if (error) {
             return res.status(400).send({
-                message: "Parametros invalidos",
+                message: "Parâmetros inválidos",
                 error: formatJoiError(error)
             });
         }

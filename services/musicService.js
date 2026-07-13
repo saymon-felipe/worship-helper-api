@@ -94,7 +94,7 @@ let musicService = {
         const youtubeApiKey = getYoutubeApiKey();
 
         if (!youtubeApiKey) {
-            throw createApiError("YOUTUBE_API_KEY ou YOUTUBE_DATA_API_KEY nao configurada.", 500);
+            throw createApiError("YOUTUBE_API_KEY ou YOUTUBE_DATA_API_KEY não configurada.", 500);
         }
 
         const searchQuery = `${name} - ${artist} official audio`;
@@ -376,7 +376,7 @@ let musicService = {
             `, [music_id, user_id, message, parent_id])
             .then((results) => {
                 if (results.affectedRows <= 0) {
-                    reject("Nao foi possivel publicar o comentario");
+                    reject("Não foi possível publicar o comentário");
                 }
 
                 resolve();
@@ -397,7 +397,7 @@ let musicService = {
                 `, [user_id, id_comment]
             ).then((results) => {
                 if (results.affectedRows <= 0) {
-                    reject("Ocorreu um erro ao curtir o comentario");
+                    reject("Ocorreu um erro ao curtir o comentário");
                 }
 
                 resolve();

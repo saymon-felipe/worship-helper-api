@@ -14,7 +14,7 @@ router.post("/procurar", login, validateBody(schemas.search), (req, res, next) =
     }
 
     _musicService.searchMusic(req.body.name, req.body.artist).then((results) => {
-        let response = functions.createResponse("Retorno dos videos encontrados para a musica selecionada", results, "POST", 200);
+        let response = functions.createResponse("Retorno dos vídeos encontrados para a música selecionada", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(error.status || 500).send(error);
@@ -58,7 +58,7 @@ router.get("/", login, (req, res, next) => {
 
 router.post("/retorna_musica/:music_id", login, validateParams(schemas.musicParams), validateBody(schemas.returnMusic), (req, res, next) => {
     _musicService.returnMusic(req.params.music_id, req.body.event_id).then((results) => {
-        let response = functions.createResponse("Retorno da musica" + req.params.music_id, results, "GET", 200);
+        let response = functions.createResponse("Retorno da música " + req.params.music_id, results, "GET", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
@@ -76,7 +76,7 @@ router.post("/comentarios/criar", login, validateBody(schemas.createComment), (r
 
 router.post("/comentarios/retorna", login, validateBody(schemas.returnComments), (req, res, next) => {
     _musicService.returnMusicComments(req.body.id_musica, req.usuario.id_usuario).then((results) => {
-        let response = functions.createResponse("Retorno dos comentarios da musica", results, "POST", 200);
+        let response = functions.createResponse("Retorno dos comentários da música", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
@@ -85,7 +85,7 @@ router.post("/comentarios/retorna", login, validateBody(schemas.returnComments),
 
 router.post("/comentarios/like", login, validateBody(schemas.likeComment), (req, res, next) => {
     _musicService.likeComment(req.body.id_aviso, req.usuario.id_usuario).then(() => {
-        let response = functions.createResponse("Curtida no comentario da musica feito com sucesso", null, "POST", 200);
+        let response = functions.createResponse("Curtida no comentário da música feita com sucesso", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
