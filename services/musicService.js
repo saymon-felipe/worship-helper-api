@@ -275,6 +275,7 @@ let musicService = {
                                 me.id_musica = m.id_musica
                             AND
                                 (? = 0 OR me.id_evento = ?)
+                            LIMIT 1
                         ) AS tom
                     FROM
                         musicas m

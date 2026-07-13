@@ -835,24 +835,17 @@ let churchService = {
                                 m.artista_musica,
                                 m.imagem AS imagem_musica,
                                 m.id_musica,
-                                (
-                                    SELECT
-                                        t.nome
-                                    FROM
-                                        tons t
-                                    INNER JOIN
-                                        musicas_eventos me
-                                    ON
-                                        me.tom = t.id
-                                    WHERE
-                                        me.id_musica = m.id_musica
-                                ) AS tom
+                                t.nome AS tom
                             FROM
                                 musicas m
                             INNER JOIN
                                 musicas_eventos me
                             ON
                                 me.id_musica = m.id_musica
+                            LEFT JOIN
+                                tons t
+                            ON
+                                me.tom = t.id
                             WHERE
                                 me.id_evento = ?
                         `, [results[0].id_evento]
