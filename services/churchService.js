@@ -994,6 +994,7 @@ let churchService = {
                 `
                     SELECT
                         e.id AS id_evento,
+                        e.id_criador,
                         e.nome AS nome_evento,
                         e.data_inicio AS data_inicio_evento,
                         (

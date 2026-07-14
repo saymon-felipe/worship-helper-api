@@ -408,6 +408,164 @@ let musicService = {
             })
         })
     },
+    eventHasMusic: async function (event_id, music_id, church_id) {
+        const results = await functions.executeSQL(`
+            SELECT
+                me.id
+            FROM
+                musicas_eventos me
+            INNER JOIN
+                eventos e
+            ON
+                e.id = me.id_evento
+            WHERE
+                me.id_evento = ?
+            AND
+                me.id_musica = ?
+            AND
+                e.id_igreja = ?
+            LIMIT 1
+        `, [event_id, music_id, church_id]);
+
+        return results.length > 0;
+    },
+    returnEventMusicComments: async function (music_id, event_id, user_id) {
+        const results = await functions.executeSQL(`
+            SELECT
+                cme.*,
+                u.nome_usuario,
+                u.imagem_usuario,
+                (
+                    SELECT
+                        count(*)
+                    FROM
+                        curtidas_comentarios_musicas_eventos ccme
+                    WHERE
+                        ccme.id_comentario = cme.id
+                ) as quantidade_curtidas,
+                CASE WHEN
+                    (
+                        SELECT
+                            count(*)
+                        FROM
+                            curtidas_comentarios_musicas_eventos ccme
+                        WHERE
+                            ccme.id_comentario = cme.id
+                        AND
+                            ccme.id_usuario = ?
+                    )
+                THEN
+                    1
+                ELSE
+                    0
+                END as current_user_liked
+            FROM
+                comentarios_musicas_eventos cme
+            INNER JOIN
+                usuario u
+            ON
+                cme.id_usuario = u.id_usuario
+            WHERE
+                cme.id_musica = ?
+            AND
+                cme.id_evento = ?
+        `, [user_id, music_id, event_id]);
+
+        return results.map((comment) => {
+            return {
+                id_aviso: comment.id,
+                id_igreja: null,
+                mensagem: comment.mensagem,
+                data_criacao: comment.data_criacao,
+                parent_id: comment.parent_id,
+                quantidade_curtidas: comment.quantidade_curtidas,
+                usuario_atual_curtiu: comment.current_user_liked,
+                criador: {
+                    id_usuario: comment.id_usuario,
+                    nome_usuario: comment.nome_usuario,
+                    imagem_usuario: comment.imagem_usuario
+                }
+            }
+        });
+    },
+    postEventMusicComment: async function (message, user_id, music_id, event_id, parent_id = null) {
+        if (message.length > 100) {
+            throw "Mensagem e muito grande, limite de 100 caracteres";
+        }
+
+        const result = await functions.executeSQL(`
+            INSERT INTO
+                comentarios_musicas_eventos
+                (id_evento, id_musica, id_usuario, mensagem, parent_id)
+            VALUES
+                (?, ?, ?, ?, ?)
+        `, [event_id, music_id, user_id, message, parent_id]);
+
+        if (result.affectedRows <= 0) {
+            throw "Nao foi possivel publicar o comentario";
+        }
+    },
+    likeEventMusicComment: async function (id_comment, user_id) {
+        const result = await functions.executeSQL(
+            `
+                INSERT INTO
+                    curtidas_comentarios_musicas_eventos
+                    (id_usuario, id_comentario)
+                VALUES
+                    (?, ?)
+            `, [user_id, id_comment]
+        );
+
+        if (result.affectedRows <= 0) {
+            throw "Ocorreu um erro ao curtir o comentario";
+        }
+    },
+    updateEventMusicComment: async function (id_comment, user_id, message) {
+        const results = await functions.executeSQL(`
+            SELECT
+                id_usuario
+            FROM
+                comentarios_musicas_eventos
+            WHERE
+                id = ?
+        `, [id_comment]);
+
+        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(user_id);
+        if (!isOwner) {
+            throw "Acesso negado";
+        }
+
+        await functions.executeSQL(`
+            UPDATE
+                comentarios_musicas_eventos
+            SET
+                mensagem = ?
+            WHERE
+                id = ?
+        `, [message, id_comment]);
+    },
+    deleteEventMusicComment: async function (id_comment, user_id) {
+        const results = await functions.executeSQL(`
+            SELECT
+                id_usuario
+            FROM
+                comentarios_musicas_eventos
+            WHERE
+                id = ?
+        `, [id_comment]);
+
+        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(user_id);
+        if (!isOwner) {
+            throw "Acesso negado";
+        }
+
+        await functions.executeSQL(`
+            DELETE FROM
+                comentarios_musicas_eventos
+            WHERE
+                id = ?
+        `, [id_comment]);
+    },
     returnMusicTagsList: function () {
         return new Promise((resolve, reject) => {
             functions.executeSQL(

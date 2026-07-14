@@ -117,6 +117,96 @@ router.post("/comentarios/like", login, validateBody(schemas.likeComment), (req,
     })
 })
 
+router.post("/comentarios-evento/criar", login, validateBody(schemas.createEventMusicComment), async (req, res, next) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const eventHasMusic = await _musicService.eventHasMusic(req.body.id_evento, req.body.id_musica, req.body.id_igreja);
+        if (!eventHasMusic) {
+            return res.status(404).send("Música não encontrada neste evento");
+        }
+
+        const canComment = await _permissions.isEventParticipantOrCreator(req.body.id_evento, req.usuario.id_usuario);
+        if (!canComment) {
+            return res.status(401).send("Apenas o criador e participantes do evento podem comentar");
+        }
+
+        await _musicService.postEventMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.id_evento, req.body.parent_id);
+        let response = functions.createResponse("Comentário da música no evento criado com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(500).send(error);
+    }
+})
+
+router.post("/comentarios-evento/retorna", login, validateBody(schemas.returnEventMusicComments), async (req, res, next) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const eventHasMusic = await _musicService.eventHasMusic(req.body.id_evento, req.body.id_musica, req.body.id_igreja);
+        if (!eventHasMusic) {
+            return res.status(404).send("Música não encontrada neste evento");
+        }
+
+        const results = await _musicService.returnEventMusicComments(req.body.id_musica, req.body.id_evento, req.usuario.id_usuario);
+        let response = functions.createResponse("Retorno dos comentários da música no evento", results, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(500).send(error);
+    }
+})
+
+router.post("/comentarios-evento/like", login, validateBody(schemas.likeEventMusicComment), async (req, res, next) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const eventHasMusic = await _musicService.eventHasMusic(req.body.id_evento, req.body.id_musica, req.body.id_igreja);
+        if (!eventHasMusic) {
+            return res.status(404).send("Música não encontrada neste evento");
+        }
+
+        await _musicService.likeEventMusicComment(req.body.id_aviso, req.usuario.id_usuario);
+        let response = functions.createResponse("Curtida no comentário da música no evento feita com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(500).send(error);
+    }
+})
+
+router.post("/comentarios-evento/editar", login, validateBody(schemas.updateEventMusicComment), async (req, res, next) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const eventHasMusic = await _musicService.eventHasMusic(req.body.id_evento, req.body.id_musica, req.body.id_igreja);
+        if (!eventHasMusic) {
+            return res.status(404).send("Música não encontrada neste evento");
+        }
+
+        await _musicService.updateEventMusicComment(req.body.id_comentario, req.usuario.id_usuario, req.body.mensagem);
+        let response = functions.createResponse("Comentário da música no evento atualizado com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(error === "Acesso negado" ? 401 : 500).send(error);
+    }
+})
+
+router.post("/comentarios-evento/deletar", login, validateBody(schemas.deleteEventMusicComment), async (req, res, next) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const eventHasMusic = await _musicService.eventHasMusic(req.body.id_evento, req.body.id_musica, req.body.id_igreja);
+        if (!eventHasMusic) {
+            return res.status(404).send("Música não encontrada neste evento");
+        }
+
+        await _musicService.deleteEventMusicComment(req.body.id_comentario, req.usuario.id_usuario);
+        let response = functions.createResponse("Comentário da música no evento removido com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(error === "Acesso negado" ? 401 : 500).send(error);
+    }
+})
+
 router.post("/comentarios/editar", login, validateBody(schemas.updateMusicComment), (req, res, next) => {
     functions.executeSQL(`SELECT id_usuario FROM comentarios_musica WHERE id = ?`, [req.body.id_comentario])
     .then((results) => {

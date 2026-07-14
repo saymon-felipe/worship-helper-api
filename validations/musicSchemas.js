@@ -35,6 +35,37 @@ module.exports = {
     likeComment: Joi.object({
         id_aviso: id
     }),
+    createEventMusicComment: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_musica: id,
+        mensagem: text(100),
+        parent_id: Joi.number().integer().min(1).optional().allow(null)
+    }),
+    returnEventMusicComments: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_musica: id
+    }),
+    likeEventMusicComment: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_musica: id,
+        id_aviso: id
+    }),
+    updateEventMusicComment: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_musica: id,
+        id_comentario: id,
+        mensagem: text(100)
+    }),
+    deleteEventMusicComment: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_musica: id,
+        id_comentario: id
+    }),
     updateMusicComment: Joi.object({
         id_comentario: id,
         mensagem: text(100)
