@@ -7,9 +7,7 @@ const PERMISSION_TREE = {
     ],
     "events.manage": [
         "events.create",
-        "events.edit",
-        "events.members",
-        "events.musics"
+        "events.edit"
     ],
     "music.manage": [
         "music.create",
@@ -31,8 +29,6 @@ const PERMISSION_LABELS = [
     { key: "events.manage", label: "Gerenciar eventos", parent: null },
     { key: "events.create", label: "Criar eventos", parent: "events.manage" },
     { key: "events.edit", label: "Editar eventos", parent: "events.manage" },
-    { key: "events.members", label: "Editar escala", parent: "events.manage" },
-    { key: "events.musics", label: "Editar repertorio", parent: "events.manage" },
     { key: "music.manage", label: "Gerenciar musicas", parent: null },
     { key: "music.create", label: "Cadastrar musicas", parent: "music.manage" },
     { key: "music.delete", label: "Remover musicas", parent: "music.manage" },

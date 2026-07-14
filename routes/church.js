@@ -648,7 +648,11 @@ router.post("/retorna-evento/:id_evento", login, validateParams(schemas.eventPar
 
 router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicParams), validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!_permissions.hasPermission(permission, "events.musics")) {
+        const canUseEventTones =
+            _permissions.hasPermission(permission, "events.create") ||
+            _permissions.hasPermission(permission, "events.edit");
+
+        if (!canUseEventTones) {
             return res.status(401).send("Acesso negado");
         }
 

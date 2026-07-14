@@ -6,10 +6,35 @@ const _musicService = require("../services/musicService");
 const ciphers = require("../functions/cyphers.js");
 const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/musicSchemas");
-const { requireAppAdministrator } = require("../functions/authClaims");
+const _permissions = require("../functions/permissions.js");
 
-router.post("/procurar", login, validateBody(schemas.search), (req, res, next) => {
-    if (!requireAppAdministrator(req, res)) {
+async function canUseMusicPermission(req, res, permissionKey) {
+    if (req.usuario && req.usuario.app_owner) {
+        return true;
+    }
+
+    const churchId = req.body.id_igreja || req.query.id_igreja;
+    if (!churchId) {
+        res.status(401).send("Acesso negado");
+        return false;
+    }
+
+    try {
+        const permission = await _permissions.checkPermission(req.usuario.id_usuario, churchId);
+        if (_permissions.hasPermission(permission, permissionKey)) {
+            return true;
+        }
+    } catch (error) {
+        res.status(401).send(error);
+        return false;
+    }
+
+    res.status(401).send("Acesso negado");
+    return false;
+}
+
+router.post("/procurar", login, validateBody(schemas.search), async (req, res, next) => {
+    if (!(await canUseMusicPermission(req, res, "music.create"))) {
         return;
     }
 
@@ -21,8 +46,8 @@ router.post("/procurar", login, validateBody(schemas.search), (req, res, next) =
     })
 })
 
-router.post("/procurar-cifra", login, validateBody(schemas.search), (req, res, next) => {
-    if (!requireAppAdministrator(req, res)) {
+router.post("/procurar-cifra", login, validateBody(schemas.search), async (req, res, next) => {
+    if (!(await canUseMusicPermission(req, res, "music.create"))) {
         return;
     }
 
@@ -34,8 +59,8 @@ router.post("/procurar-cifra", login, validateBody(schemas.search), (req, res, n
     })
 })
 
-router.post("/", login, validateBody(schemas.create), (req, res, next) => {
-    if (!requireAppAdministrator(req, res)) {
+router.post("/", login, validateBody(schemas.create), async (req, res, next) => {
+    if (!(await canUseMusicPermission(req, res, "music.create"))) {
         return;
     }
 
@@ -146,8 +171,8 @@ router.get("/tags", login, (req, res, next) => {
     })
 })
 
-router.delete("/:music_id", login, validateParams(schemas.musicParams), (req, res, next) => {
-    if (!requireAppAdministrator(req, res)) {
+router.delete("/:music_id", login, validateParams(schemas.musicParams), async (req, res, next) => {
+    if (!(await canUseMusicPermission(req, res, "music.delete"))) {
         return;
     }
 
