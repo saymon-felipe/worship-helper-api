@@ -928,8 +928,8 @@ let churchService = {
                             WHERE
                                 ti.tags_id_igreja = ? AND tu.tags_usuario_id_usuario = e.id_criador
                         ) AS criador_tag,
-                        COUNT(me.id) AS quantidade_membros,
-                        COUNT(mue.id) AS quantidade_musicas
+                        COUNT(DISTINCT me.id) AS quantidade_membros,
+                        COUNT(DISTINCT mue.id) AS quantidade_musicas
                     FROM
                         eventos e
                     LEFT JOIN
@@ -1008,8 +1008,8 @@ let churchService = {
                             WHERE
                                 ti.tags_id_igreja = ? AND tu.tags_usuario_id_usuario = e.id_criador
                         ) AS criador_tag,
-                        COUNT(me.id) AS quantidade_membros,
-                        COUNT(mue.id) AS quantidade_musicas
+                        COUNT(DISTINCT me.id) AS quantidade_membros,
+                        COUNT(DISTINCT mue.id) AS quantidade_musicas
                     FROM
                         eventos e
                     INNER JOIN
