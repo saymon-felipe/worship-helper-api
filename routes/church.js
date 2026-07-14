@@ -50,7 +50,7 @@ router.post("/atualizar-igreja", login, (req, res, next) => {
 
 router.post("/criar-tag", login, validateBody(schemas.tag), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.tags")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -67,7 +67,7 @@ router.post("/criar-tag", login, validateBody(schemas.tag), (req, res, next) => 
 
 router.post("/deletar-tag", login, validateBody(schemas.deleteTag), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.tags")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -101,12 +101,29 @@ router.post("/retorna-tags", login, validateBody(schemas.churchId), (req, res, n
 
 router.post("/criar-funcao", login, validateBody(schemas.churchFunction), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.roles")) {
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createFunction(req.body.id_igreja, req.body.nome).then(() => {
+        _churchService.createFunction(req.body.id_igreja, req.body.nome, req.body.permissoes).then(() => {
             let response = functions.createResponse("Função criada com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/atualizar-funcao", login, validateBody(schemas.updateChurchFunction), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!_permissions.hasPermission(permission, "members.roles")) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.updateFunction(req.body.id_function, req.body.id_igreja, req.body.nome, req.body.permissoes).then(() => {
+            let response = functions.createResponse("Funcao atualizada com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -118,7 +135,7 @@ router.post("/criar-funcao", login, validateBody(schemas.churchFunction), (req, 
 
 router.post("/deletar-funcao", login, validateBody(schemas.deleteFunction), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.roles")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -186,7 +203,7 @@ router.post("/retorna-membros", login, validateBody(schemas.churchId), (req, res
 
 router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador && !req.body.parent_id) {
+        if (!req.body.parent_id && !_permissions.hasPermission(permission, "warnings.create")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -196,6 +213,54 @@ router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, 
         }).catch((error) => {
             return res.status(500).send(error);
         })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/editar-aviso", login, validateBody(schemas.updateWarning), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        functions.executeSQL(`SELECT aviso_igreja_id_criador FROM avisos_igreja WHERE id_aviso_igreja = ?`, [req.body.id_aviso])
+        .then((results) => {
+            const isCreator = results.length > 0 && Number(results[0].aviso_igreja_id_criador) === Number(req.usuario.id_usuario);
+            
+            if (!isCreator && !_permissions.hasPermission(permission, "warnings.edit")) {
+                return res.status(401).send("Acesso negado");
+            }
+
+            _churchService.updateWarning(req.body.id_igreja, req.body.id_aviso, req.body.mensagem).then(() => {
+                let response = functions.createResponse("Aviso atualizado com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            })
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/deletar-aviso", login, validateBody(schemas.deleteWarning), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        functions.executeSQL(`SELECT aviso_igreja_id_criador FROM avisos_igreja WHERE id_aviso_igreja = ?`, [req.body.id_aviso])
+        .then((results) => {
+            const isCreator = results.length > 0 && Number(results[0].aviso_igreja_id_criador) === Number(req.usuario.id_usuario);
+            
+            if (!isCreator && !_permissions.hasPermission(permission, "warnings.delete")) {
+                return res.status(401).send("Acesso negado");
+            }
+
+            _churchService.deleteWarning(req.body.id_igreja, req.body.id_aviso).then(() => {
+                let response = functions.createResponse("Aviso removido com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            })
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
     }).catch((error) => {
         return res.status(401).send(error);
     })
@@ -263,7 +328,7 @@ router.post("/permissao", login, validateBody(schemas.churchId), (req, res, next
 
 router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.invite")) {
             return res.status(401).send("Acesso negado");
         }
         
@@ -280,7 +345,7 @@ router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res
 
 router.post("/retorna-convites-pendentes", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.invite")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -297,7 +362,7 @@ router.post("/retorna-convites-pendentes", login, validateBody(schemas.churchId)
 
 router.post("/deletar-convite", login, validateBody(schemas.deleteInvite), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.invite")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -314,7 +379,7 @@ router.post("/deletar-convite", login, validateBody(schemas.deleteInvite), (req,
 
 router.post("/adicionar-funcao", login, validateBody(schemas.addFunction), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.roles")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -338,7 +403,7 @@ router.post("/remover-membro", login, validateBody(schemas.removeMember), (req, 
             return res.status(401).send(response);
         }
 
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.remove")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -399,12 +464,29 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
 
 router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "events.create")) {
             return res.status(401).send("Acesso negado");
         }
 
         _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(() => {
             let response = functions.createResponse("Evento cadastrado com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.createEvent), (req, res, next) => {
+    _permissions.canEditEvent(req.params.id_evento, req.body.id_igreja, req.usuario.id_usuario).then((canEdit) => {
+        if (!canEdit) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.updateEvent(req.params.id_evento, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(() => {
+            let response = functions.createResponse("Evento atualizado com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -431,6 +513,122 @@ router.post("/retorna-eventos", login, validateBody(schemas.churchId), (req, res
     })
 })
 
+router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComment), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+        _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja).then((belongsToChurch) => {
+            if (!belongsToChurch) {
+                return res.status(404).send("Evento nao encontrado");
+            }
+
+            _permissions.isEventParticipantOrCreator(req.body.id_evento, req.usuario.id_usuario).then((canComment) => {
+                if (!canComment) {
+                    return res.status(401).send("Apenas o criador e participantes do evento podem comentar");
+                }
+
+                _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id).then(() => {
+                    let response = functions.createResponse("Comentario criado com sucesso", null, "POST", 200);
+                    return res.status(200).send(response);
+                }).catch((error) => {
+                    return res.status(500).send(error);
+                })
+            }).catch((error) => {
+                return res.status(401).send(error);
+            })
+        }).catch((error) => {
+            return res.status(401).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/eventos/comentarios/retorna", login, validateBody(schemas.eventComments), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+        _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja).then((belongsToChurch) => {
+            if (!belongsToChurch) {
+                return res.status(404).send("Evento nao encontrado");
+            }
+
+            _churchService.returnEventComments(req.body.id_evento, req.usuario.id_usuario).then((results) => {
+                let response = functions.createResponse("Retorno dos comentarios do evento", results, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            })
+        }).catch((error) => {
+            return res.status(401).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/eventos/comentarios/like", login, validateBody(schemas.likeEventComment), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
+        _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja).then((belongsToChurch) => {
+            if (!belongsToChurch) {
+                return res.status(404).send("Evento nao encontrado");
+            }
+
+            _churchService.likeEventComment(req.body.id_aviso, req.usuario.id_usuario).then(() => {
+                let response = functions.createResponse("Curtida no comentario do evento feita com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            })
+        }).catch((error) => {
+            return res.status(401).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/eventos/comentarios/editar", login, validateBody(schemas.updateEventComment), (req, res, next) => {
+    functions.executeSQL(`SELECT id_usuario FROM comentarios_eventos WHERE id = ?`, [req.body.id_comentario])
+    .then((results) => {
+        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
+        if (!isOwner) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(`UPDATE comentarios_eventos SET mensagem = ? WHERE id = ?`, [req.body.mensagem, req.body.id_comentario])
+        .then(() => {
+            let response = functions.createResponse("Comentário do evento atualizado com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(500).send(error);
+    });
+})
+
+router.post("/eventos/comentarios/deletar", login, validateBody(schemas.deleteEventComment), (req, res, next) => {
+    functions.executeSQL(`SELECT id_usuario FROM comentarios_eventos WHERE id = ?`, [req.body.id_comentario])
+    .then((results) => {
+        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
+        if (!isOwner) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(`DELETE FROM curtidas_comentarios_eventos WHERE id_comentario = ?`, [req.body.id_comentario])
+        .then(() => {
+            functions.executeSQL(`DELETE FROM comentarios_eventos WHERE id = ? OR parent_id = ?`, [req.body.id_comentario, req.body.id_comentario])
+            .then(() => {
+                let response = functions.createResponse("Comentário do evento removido com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            });
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(500).send(error);
+    });
+})
+
 router.post("/retorna-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {
@@ -450,7 +648,7 @@ router.post("/retorna-evento/:id_evento", login, validateParams(schemas.eventPar
 
 router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicParams), validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "events.musics")) {
             return res.status(401).send("Acesso negado");
         }
 

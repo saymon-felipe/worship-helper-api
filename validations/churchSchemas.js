@@ -26,7 +26,14 @@ module.exports = {
     }),
     churchFunction: Joi.object({
         id_igreja: id,
-        nome: text(50)
+        nome: text(50),
+        permissoes: Joi.array().items(Joi.string().trim().max(60)).optional().default([])
+    }),
+    updateChurchFunction: Joi.object({
+        id_igreja: id,
+        id_function: id,
+        nome: text(50),
+        permissoes: Joi.array().items(Joi.string().trim().max(60)).optional().default([])
     }),
     deleteFunction: Joi.object({
         id_igreja: id,
@@ -39,6 +46,30 @@ module.exports = {
     }),
     likeWarning: Joi.object({
         id_igreja: id,
+        id_aviso: id
+    }),
+    updateWarning: Joi.object({
+        id_igreja: id,
+        id_aviso: id,
+        mensagem: text(100)
+    }),
+    deleteWarning: Joi.object({
+        id_igreja: id,
+        id_aviso: id
+    }),
+    eventComment: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        mensagem: text(280),
+        parent_id: Joi.number().integer().min(1).optional().allow(null)
+    }),
+    eventComments: Joi.object({
+        id_igreja: id,
+        id_evento: id
+    }),
+    likeEventComment: Joi.object({
+        id_igreja: id,
+        id_evento: id,
         id_aviso: id
     }),
     sendInvite: Joi.object({
@@ -74,5 +105,14 @@ module.exports = {
     }),
     musicParams: Joi.object({
         id_musica: id
+    }),
+    updateEventComment: Joi.object({
+        id_igreja: id,
+        id_comentario: id,
+        mensagem: text(280)
+    }),
+    deleteEventComment: Joi.object({
+        id_igreja: id,
+        id_comentario: id
     })
 };

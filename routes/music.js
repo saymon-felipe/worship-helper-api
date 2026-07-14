@@ -92,6 +92,51 @@ router.post("/comentarios/like", login, validateBody(schemas.likeComment), (req,
     })
 })
 
+router.post("/comentarios/editar", login, validateBody(schemas.updateMusicComment), (req, res, next) => {
+    functions.executeSQL(`SELECT id_usuario FROM comentarios_musica WHERE id = ?`, [req.body.id_comentario])
+    .then((results) => {
+        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
+        if (!isOwner) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(`UPDATE comentarios_musica SET mensagem = ? WHERE id = ?`, [req.body.mensagem, req.body.id_comentario])
+        .then(() => {
+            let response = functions.createResponse("Comentário da música atualizado com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(500).send(error);
+    });
+})
+
+router.post("/comentarios/deletar", login, validateBody(schemas.deleteMusicComment), (req, res, next) => {
+    functions.executeSQL(`SELECT id_usuario FROM comentarios_musica WHERE id = ?`, [req.body.id_comentario])
+    .then((results) => {
+        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
+        if (!isOwner) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(`DELETE FROM curtidas_comentarios_musicas WHERE id_comentario = ?`, [req.body.id_comentario])
+        .then(() => {
+            functions.executeSQL(`DELETE FROM comentarios_musica WHERE id = ? OR parent_id = ?`, [req.body.id_comentario, req.body.id_comentario])
+            .then(() => {
+                let response = functions.createResponse("Comentário da música removido com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            });
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(500).send(error);
+    });
+})
+
 router.get("/tags", login, (req, res, next) => {
     _musicService.returnMusicTagsList().then((results) => {
         let response = functions.createResponse("Retorno da lista de tags de musicas", results, "GET", 200);

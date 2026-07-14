@@ -1,4 +1,5 @@
 const functions = require("./functions");
+const { ALL_PERMISSIONS, getPermissionParent, parsePermissions } = require("./permissionKeys");
 
 let permissions = {
     checkPermission: async function (id_usuario, id_igreja) {
@@ -27,7 +28,8 @@ let permissions = {
         if (administrador) {
             return {
                 administrador: true,
-                apenas_membro: false
+                apenas_membro: false,
+                permissions: ALL_PERMISSIONS
             };
         }
 
@@ -37,10 +39,102 @@ let permissions = {
             throw "Permissão negada";
         }
 
+        const functionRows = await functions.executeSQL(`
+            SELECT
+                fi.permissoes
+            FROM
+                funcoes_usuario fu
+            INNER JOIN
+                funcoes_igreja fi
+            ON
+                fi.id_funcoes_igreja = fu.id_funcoes_referencia
+            WHERE
+                fu.id_funcoes_igreja_id_igreja = ?
+            AND
+                fu.id_funcoes_igreja_id_usuario = ?
+        `, [id_igreja, id_usuario]);
+
+        const permissions = [
+            ...new Set(functionRows.flatMap((row) => parsePermissions(row.permissoes)))
+        ];
+
         return {
             administrador: false,
-            apenas_membro: true
+            apenas_membro: true,
+            permissions
         };
+    },
+    hasPermission: function (permissionObj, permissionKey) {
+        if (!permissionObj) {
+            return false;
+        }
+
+        if (permissionObj.administrador) {
+            return true;
+        }
+
+        const permissions = Array.isArray(permissionObj.permissions) ? permissionObj.permissions : [];
+        if (!permissions.includes(permissionKey)) {
+            return false;
+        }
+
+        const parent = getPermissionParent(permissionKey);
+        return !parent || permissions.includes(parent);
+    },
+    requirePermission: async function (id_usuario, id_igreja, permissionKey) {
+        const permission = await this.checkPermission(id_usuario, id_igreja);
+        if (!this.hasPermission(permission, permissionKey)) {
+            throw "Acesso negado";
+        }
+
+        return permission;
+    },
+    isEventParticipantOrCreator: async function (event_id, user_id) {
+        const results = await functions.executeSQL(`
+            SELECT
+                e.id_criador,
+                me.id_usuario AS participante
+            FROM
+                eventos e
+            LEFT JOIN
+                membros_eventos me
+            ON
+                me.id_evento = e.id
+            AND
+                me.id_usuario = ?
+            WHERE
+                e.id = ?
+            LIMIT 1
+        `, [user_id, event_id]);
+
+        if (results.length <= 0) {
+            return false;
+        }
+
+        return results[0].id_criador == user_id || results[0].participante == user_id;
+    },
+    canEditEvent: async function (event_id, id_igreja, user_id) {
+        const permission = await this.checkPermission(user_id, id_igreja);
+        if (this.hasPermission(permission, "events.edit")) {
+            return true;
+        }
+
+        const results = await functions.executeSQL(`
+            SELECT id_criador
+            FROM eventos
+            WHERE id = ? AND id_igreja = ?
+        `, [event_id, id_igreja]);
+
+        return results.length > 0 && results[0].id_criador == user_id;
+    },
+    eventBelongsToChurch: async function (event_id, id_igreja) {
+        const results = await functions.executeSQL(`
+            SELECT id
+            FROM eventos
+            WHERE id = ? AND id_igreja = ?
+        `, [event_id, id_igreja]);
+
+        return results.length > 0;
     },
     isMember: function (id_usuario, id_igreja) {
         return new Promise((resolve, reject) => {

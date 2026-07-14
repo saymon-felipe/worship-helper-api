@@ -1,5 +1,6 @@
 const functions = require("../functions/functions.js");
 const _permissions = require("../functions/permissions.js");
+const { parsePermissions } = require("../functions/permissionKeys");
 const _emailService = require("./emailService");
 
 let churchService = {
@@ -111,15 +112,15 @@ let churchService = {
             })
         })
     },
-    createFunction: function (company_id, new_function) {
+    createFunction: function (company_id, new_function, permissions = []) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(`
                 INSERT INTO
                     funcoes_igreja
-                    (id_funcoes_igreja_id_igreja, nome_funcao, tipo_funcao)
+                    (id_funcoes_igreja_id_igreja, nome_funcao, tipo_funcao, permissoes)
                 VALUES
-                    (?, ?, "membros")
-            `, [company_id, new_function])
+                    (?, ?, "membros", ?)
+            `, [company_id, new_function, JSON.stringify(Array.isArray(permissions) ? permissions : [])])
             .then(() => {
                 resolve();
             })
@@ -147,6 +148,33 @@ let churchService = {
                 })
         })
     },
+    updateFunction: function (function_id, company_id, new_function, permissions = []) {
+        return new Promise((resolve, reject) => {
+            functions.executeSQL(`
+                    UPDATE
+                        funcoes_igreja
+                    SET
+                        nome_funcao = ?,
+                        permissoes = ?
+                    WHERE
+                        id_funcoes_igreja = ?
+                    AND
+                        id_funcoes_igreja_id_igreja = ?
+                `,
+                [new_function, JSON.stringify(Array.isArray(permissions) ? permissions : []), function_id, company_id])
+                .then((results) => {
+                    if (results.affectedRows <= 0) {
+                        reject("Funcao nao encontrada");
+                        return;
+                    }
+
+                    resolve();
+                })
+                .catch((error) => {
+                    reject(error);
+                })
+        })
+    },
     returnFunctions: function (company_id) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(`
@@ -163,7 +191,8 @@ let churchService = {
                     return {
                         id_funcao: currentFunction.id_funcoes_igreja,
                         id_igreja: currentFunction.id_funcoes_igreja_id_igreja,
-                        nome_funcao: currentFunction.nome_funcao
+                        nome_funcao: currentFunction.nome_funcao,
+                        permissoes: parsePermissions(currentFunction.permissoes)
                     }
                 })
                 
@@ -374,6 +403,57 @@ let churchService = {
                 reject(error);
             })
         })
+    },
+    updateWarning: async function (company_id, warning_id, message) {
+        if (message.length > 100) {
+            throw "Mensagem e muito grande, limite de 100 caracteres";
+        }
+
+        const result = await functions.executeSQL(`
+            UPDATE
+                avisos_igreja
+            SET
+                aviso_igreja_mensagem = ?
+            WHERE
+                id_aviso_igreja = ?
+            AND
+                aviso_igreja_id_igreja = ?
+        `, [message, warning_id, company_id]);
+
+        if (result.affectedRows <= 0) {
+            throw "Aviso nao encontrado";
+        }
+    },
+    deleteWarning: async function (company_id, warning_id) {
+        const warnings = await functions.executeSQL(`
+            SELECT
+                id_aviso_igreja
+            FROM
+                avisos_igreja
+            WHERE
+                (id_aviso_igreja = ? OR aviso_igreja_parent_id = ?)
+            AND
+                aviso_igreja_id_igreja = ?
+        `, [warning_id, warning_id, company_id]);
+
+        const warningIds = warnings.map((warning) => warning.id_aviso_igreja);
+        if (warningIds.length <= 0) {
+            throw "Aviso nao encontrado";
+        }
+
+        await functions.executeSQL(`
+            DELETE FROM
+                curtidas_avisos
+            WHERE
+                id_aviso IN (${warningIds.map(() => "?").join(",")})
+        `, warningIds);
+
+        await functions.executeSQL(`
+            DELETE FROM
+                avisos_igreja
+            WHERE
+                id_aviso_igreja IN (${warningIds.map(() => "?").join(",")})
+        `, warningIds);
     },
     sendInvite: async function (company_id, user_id, requesting_user_id, email_usuario = "") {
         const normalizedEmail = String(email_usuario || "").trim().toLowerCase();
@@ -686,6 +766,146 @@ let churchService = {
             })
         })
     },
+    updateEvent: async function (event_id, company_id, event_date, event_name, event_members, event_musics) {
+        if (event_name.length > 15) {
+            throw "Nome muito grande, limite 15 caracteres";
+        }
+
+        const updateResult = await functions.executeSQL(
+            `
+                UPDATE
+                    eventos
+                SET
+                    nome = ?,
+                    data_inicio = ?
+                WHERE
+                    id = ?
+                AND
+                    id_igreja = ?
+            `,
+            [event_name, functions.dateToDB(event_date), event_id, company_id]
+        );
+
+        if (updateResult.affectedRows <= 0) {
+            throw "Evento nao encontrado";
+        }
+
+        await functions.executeSQL("DELETE FROM membros_eventos WHERE id_evento = ?", [event_id]);
+        await functions.executeSQL("DELETE FROM musicas_eventos WHERE id_evento = ?", [event_id]);
+
+        const promises = [];
+        for (let i = 0; i < event_members.length; i++) {
+            promises.push(functions.executeSQL(
+                `
+                    INSERT INTO
+                        membros_eventos
+                        (id_usuario, id_funcao, id_evento)
+                    VALUES
+                        (?, ?, ?)
+                `,
+                [event_members[i].id_usuario, event_members[i].id_funcao, event_id]
+            ));
+        }
+
+        for (let i = 0; i < event_musics.length; i++) {
+            promises.push(functions.executeSQL(
+                `
+                    INSERT INTO
+                        musicas_eventos
+                        (id_musica, id_evento, tom)
+                    VALUES
+                        (?, ?, ?);
+
+                    INSERT INTO tons_igreja (id_igreja, id_musica, id_tom)
+                    SELECT ${company_id}, ${event_musics[i].id}, ${event_musics[i].tone.id}
+                    FROM DUAL
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM tons_igreja
+                        WHERE id_igreja = ${company_id} AND id_musica = ${event_musics[i].id} AND id_tom = ${event_musics[i].tone.id}
+                    );
+                `,
+                [event_musics[i].id, event_id, event_musics[i].tone.id]
+            ));
+        }
+
+        await Promise.all(promises);
+    },
+    postEventComment: async function (message, user_id, event_id, parent_id = null) {
+        if (message.length > 280) {
+            throw "Mensagem e muito grande, limite de 280 caracteres";
+        }
+
+        const result = await functions.executeSQL(`
+            INSERT INTO
+                comentarios_eventos
+                (id_evento, id_usuario, mensagem, parent_id)
+            VALUES
+                (?, ?, ?, ?)
+        `, [event_id, user_id, message, parent_id]);
+
+        if (result.affectedRows <= 0) {
+            throw "Nao foi possivel publicar o comentario";
+        }
+    },
+    returnEventComments: async function (event_id, user_id) {
+        const results = await functions.executeSQL(`
+            SELECT
+                ce.*,
+                u.nome_usuario,
+                u.imagem_usuario,
+                (
+                    SELECT count(*)
+                    FROM curtidas_comentarios_eventos cce
+                    WHERE cce.id_comentario = ce.id
+                ) as quantidade_curtidas,
+                EXISTS (
+                    SELECT 1
+                    FROM curtidas_comentarios_eventos cce
+                    WHERE cce.id_comentario = ce.id AND cce.id_usuario = ?
+                ) as usuario_atual_curtiu
+            FROM
+                comentarios_eventos ce
+            INNER JOIN
+                usuario u
+            ON
+                u.id_usuario = ce.id_usuario
+            WHERE
+                ce.id_evento = ?
+            ORDER BY
+                ce.data_criacao DESC
+        `, [user_id, event_id]);
+
+        return results.map((comment) => ({
+            id_aviso: comment.id,
+            id_criador: comment.id_usuario,
+            mensagem: comment.mensagem,
+            data_criacao: comment.data_criacao,
+            quantidade_curtidas: comment.quantidade_curtidas,
+            usuario_atual_curtiu: Boolean(comment.usuario_atual_curtiu),
+            parent_id: comment.parent_id,
+            criador: {
+                nome_usuario: comment.nome_usuario,
+                imagem_usuario: comment.imagem_usuario
+            }
+        }));
+    },
+    likeEventComment: async function (id_comment, user_id) {
+        const result = await functions.executeSQL(
+            `
+                INSERT INTO
+                    curtidas_comentarios_eventos
+                    (id_usuario, id_comentario)
+                VALUES
+                    (?, ?)
+            `,
+            [user_id, id_comment]
+        );
+
+        if (result.affectedRows <= 0) {
+            throw "Ocorreu um erro ao curtir o comentario";
+        }
+    },
     returnEvents: function (company_id) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(
@@ -693,6 +913,7 @@ let churchService = {
                     SELECT
                         e.id_igreja,
                         e.id AS id_evento,
+                        e.id_criador,
                         e.nome AS nome_evento,
                         e.data_inicio AS data_inicio_evento,
                         (
@@ -811,6 +1032,7 @@ let churchService = {
                             u.imagem_usuario,
                             u.id_usuario,
                             u.nome_usuario,
+                            me.id_funcao,
                             fi.nome_funcao AS user_occupation
                         FROM
                             usuario u
@@ -835,6 +1057,7 @@ let churchService = {
                                 m.artista_musica,
                                 m.imagem AS imagem_musica,
                                 m.id_musica,
+                                t.id AS id_tom,
                                 t.nome AS tom
                             FROM
                                 musicas m

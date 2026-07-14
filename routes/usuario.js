@@ -109,7 +109,7 @@ router.patch("/update_image", login, uploadConfig.upload.single('imagem_usuario'
 });
 router.post("/altera-tag", login, validateBody(schemas.changeTag), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.tags")) {
             return res.status(401).send("Acesso negado");
         }
 
@@ -125,7 +125,7 @@ router.post("/altera-tag", login, validateBody(schemas.changeTag), (req, res, ne
 })
 router.post("/altera-funcoes", login, validateBody(schemas.changeFunctions), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador) {
+        if (!_permissions.hasPermission(permission, "members.roles")) {
             return res.status(401).send("Acesso negado");
         }
 
