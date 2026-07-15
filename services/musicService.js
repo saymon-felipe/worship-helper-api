@@ -6,7 +6,7 @@ const GOOGLE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 const GOOGLE_VIDEO_DETAILS_URL = "https://www.googleapis.com/youtube/v3/videos";
 
 function getYoutubeApiKey() {
-    return process.env.YOUTUBE_API_KEY || process.env.YOUTUBE_DATA_API_KEY || "";
+    return process.env.YOUTUBE_API_KEY;
 }
 
 function createApiError(message, status = 500) {
@@ -94,7 +94,7 @@ let musicService = {
         const youtubeApiKey = getYoutubeApiKey();
 
         if (!youtubeApiKey) {
-            throw createApiError("YOUTUBE_API_KEY ou YOUTUBE_DATA_API_KEY não configurada.", 500);
+            throw createApiError("YOUTUBE_API_KEY não configurada.", 500);
         }
 
         const searchQuery = `${name} - ${artist} official audio`;
