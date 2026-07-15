@@ -31,7 +31,7 @@ router.post('/solicitar-demonstracao', async (req, res, next) => {
         console.error('[LEADS ERROR] Failed to save contact lead to database:', err);
     }
 
-    const adminEmail = process.env.ADMIN_EMAIL || 'contato.worshiphelper@gmail.com';
+    const adminEmail = process.env.APP_ADMINISTRATOR_EMAIL;
 
     // Generates templates from templates folder
     const adminHtml = createAdminContactHtml({ name, phone, email, teamSize });
