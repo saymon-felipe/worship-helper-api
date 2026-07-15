@@ -161,6 +161,19 @@ let usuarioService = {
                                 email_usuario: user_email
                             }
 
+                            // Save lead to database
+                            functions.executeSQL(
+                                `INSERT INTO leads 
+                                    (nome, email, telefone, origem, tipo_equipe, nome_igreja) 
+                                 VALUES 
+                                    (?, ?, NULL, 'app_cadastro', NULL, NULL)`,
+                                [user_name, user_email]
+                            ).then(() => {
+                                console.log(`[LEADS] Registration lead saved for: ${user_email}`);
+                            }).catch((err) => {
+                                console.error('[LEADS ERROR] Failed to save app registration lead to database:', err);
+                            });
+
                             resolve(usuario_criado);
                         })
                         .catch((error2) => {
