@@ -666,6 +666,125 @@ router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicPar
         return res.status(401).send(error);
     })
 })
+
+router.post("/eventos/membros/anotacoes/criar", login, validateBody(schemas.createMemberNote), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador && !permission.apenas_membro) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(
+            `INSERT INTO anotacoes_membros_eventos (id_evento, id_usuario_membro, id_usuario_criador, mensagem) VALUES (?, ?, ?, ?)`,
+            [req.body.id_evento, req.body.id_usuario_membro, req.usuario.id_usuario, req.body.mensagem]
+        ).then(() => {
+            let response = functions.createResponse("Anotação criada com sucesso", null, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(401).send(error);
+    });
+});
+
+router.post("/eventos/membros/anotacoes/retorna", login, validateBody(schemas.getMemberNotes), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador && !permission.apenas_membro) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(
+            `
+                SELECT 
+                    n.id, 
+                    n.id_evento, 
+                    n.id_usuario_membro, 
+                    n.id_usuario_criador, 
+                    n.mensagem, 
+                    n.data_criacao,
+                    u.nome_usuario,
+                    u.imagem_usuario
+                FROM 
+                    anotacoes_membros_eventos n
+                INNER JOIN 
+                    usuario u 
+                ON 
+                    u.id_usuario = n.id_usuario_criador
+                WHERE 
+                    n.id_evento = ? AND n.id_usuario_membro = ?
+                ORDER BY 
+                    n.data_criacao DESC
+            `,
+            [req.body.id_evento, req.body.id_usuario_membro]
+        ).then((results) => {
+            let response = functions.createResponse("Anotações retornadas com sucesso", results, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(401).send(error);
+    });
+});
+
+router.post("/eventos/membros/anotacoes/editar", login, validateBody(schemas.updateMemberNote), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador && !permission.apenas_membro) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(`SELECT id_usuario_criador FROM anotacoes_membros_eventos WHERE id = ?`, [req.body.id_nota])
+        .then((results) => {
+            const isOwner = results.length > 0 && Number(results[0].id_usuario_criador) === Number(req.usuario.id_usuario);
+            if (!isOwner) {
+                return res.status(401).send("Acesso negado");
+            }
+
+            functions.executeSQL(
+                `UPDATE anotacoes_membros_eventos SET mensagem = ? WHERE id = ?`,
+                [req.body.mensagem, req.body.id_nota]
+            ).then(() => {
+                let response = functions.createResponse("Anotação editada com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            });
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(401).send(error);
+    });
+});
+
+router.post("/eventos/membros/anotacoes/deletar", login, validateBody(schemas.deleteMemberNote), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!permission.administrador && !permission.apenas_membro) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        functions.executeSQL(`SELECT id_usuario_criador FROM anotacoes_membros_eventos WHERE id = ?`, [req.body.id_nota])
+        .then((results) => {
+            const isOwner = results.length > 0 && Number(results[0].id_usuario_criador) === Number(req.usuario.id_usuario);
+            if (!isOwner) {
+                return res.status(401).send("Acesso negado");
+            }
+
+            functions.executeSQL(
+                `DELETE FROM anotacoes_membros_eventos WHERE id = ?`,
+                [req.body.id_nota]
+            ).then(() => {
+                let response = functions.createResponse("Anotação deletada com sucesso", null, "POST", 200);
+                return res.status(200).send(response);
+            }).catch((error) => {
+                return res.status(500).send(error);
+            });
+        }).catch((error) => {
+            return res.status(500).send(error);
+        });
+    }).catch((error) => {
+        return res.status(401).send(error);
+    });
+});
+
 module.exports = router;
-
-

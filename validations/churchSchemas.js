@@ -114,5 +114,25 @@ module.exports = {
     deleteEventComment: Joi.object({
         id_igreja: id,
         id_comentario: id
+    }),
+    createMemberNote: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_usuario_membro: id,
+        mensagem: text(1000)
+    }),
+    getMemberNotes: Joi.object({
+        id_igreja: id,
+        id_evento: id,
+        id_usuario_membro: id
+    }),
+    updateMemberNote: Joi.object({
+        id_igreja: id,
+        id_nota: id,
+        mensagem: text(1000)
+    }),
+    deleteMemberNote: Joi.object({
+        id_igreja: id,
+        id_nota: id
     })
 };

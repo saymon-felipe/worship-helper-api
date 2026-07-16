@@ -2,10 +2,12 @@ const cheerio = require("cheerio");
 const OpenAI = require("openai");
 
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
+const CIFRA_CLUB_SUGGEST_URL = "https://solr.sscdn.co/cc/c7/";
 const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 const MAX_RESULTS = 8;
 const HTML_LOG_LIMIT = 4000;
 const TEXT_LOG_LIMIT = 1500;
+const CIFRA_CLUB_SONG_TYPE = "2";
 
 function compactText(value = "", limit = 160) {
     return String(value).replace(/\s+/g, " ").trim().slice(0, limit);
@@ -312,6 +314,82 @@ async function fetchSearchHtml(query) {
     return html;
 }
 
+function parseJsonResponse(text) {
+    const trimmed = String(text || "").trim();
+    const jsonText = trimmed.startsWith("(") && trimmed.endsWith(")")
+        ? trimmed.slice(1, -1)
+        : trimmed;
+
+    return JSON.parse(jsonText);
+}
+
+async function fetchCifraClubSuggest(query) {
+    const searchUrl = new URL(CIFRA_CLUB_SUGGEST_URL);
+    searchUrl.searchParams.set("q", query);
+    searchUrl.searchParams.set("callback", "suggest_callback");
+
+    debugLog("Iniciando busca direta no Cifra Club", {
+        query,
+        searchUrl: searchUrl.toString()
+    });
+
+    const response = await fetch(searchUrl, {
+        headers: {
+            "user-agent": "Mozilla/5.0",
+            "referer": "https://m.cifraclub.com.br/"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Cifra Club suggest failed with status ${response.status}`);
+    }
+
+    const text = await response.text();
+    const data = parseJsonResponse(text);
+
+    debugLog("Resposta da busca direta no Cifra Club", {
+        status: response.status,
+        resultCount: data && data.response && Array.isArray(data.response.docs) ? data.response.docs.length : 0,
+        responsePreview: truncateForLog(text, TEXT_LOG_LIMIT)
+    });
+
+    return data;
+}
+
+function parseCifraClubSuggestResults(data) {
+    const docs = data && data.response && Array.isArray(data.response.docs) ? data.response.docs : [];
+
+    return docs
+        .filter((doc) => String(doc.tipo) === CIFRA_CLUB_SONG_TYPE && doc.dns && doc.url && doc.txt)
+        .map((doc) => ({
+            title: `${compactText(doc.txt, 160)} - ${compactText(doc.art || "", 80)} - Cifra Club`,
+            href: `https://www.cifraclub.com.br/${doc.dns}/${doc.url}/`,
+            snippet: compactText(doc.album_name || "", 220),
+            score: Number(doc.score || (doc.features && doc.features.original_score) || 0)
+        }))
+        .slice(0, 12);
+}
+
+async function searchCifraClubSuggest(name, artist) {
+    const query = compactText(`${name} ${artist}`, 180);
+
+    if (!query) {
+        return [];
+    }
+
+    try {
+        const data = await fetchCifraClubSuggest(query);
+        return parseCifraClubSuggestResults(data);
+    } catch (error) {
+        console.warn("[Cyphers] Falha na busca direta do Cifra Club:", error.message);
+        debugLog("Erro detalhado na busca direta do Cifra Club", {
+            message: error.message,
+            stack: error.stack
+        });
+        return [];
+    }
+}
+
 function parseSearchResults(html, name, artist) {
     const $ = cheerio.load(html);
     const keywords = extractKeywords(name, artist);
@@ -351,6 +429,22 @@ function parseSearchResults(html, name, artist) {
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 12);
+}
+
+function mergeCandidates(primaryCandidates, secondaryCandidates) {
+    const seen = new Set();
+    const merged = [];
+
+    [...primaryCandidates, ...secondaryCandidates].forEach((candidate) => {
+        if (!candidate || !candidate.href || seen.has(candidate.href)) {
+            return;
+        }
+
+        seen.add(candidate.href);
+        merged.push(candidate);
+    });
+
+    return merged;
 }
 
 function getOpenAIClient() {
@@ -479,14 +573,30 @@ async function rerankWithOpenAI(candidates, name, artist) {
 
 let cyphers = {
     scrapeCifraClub: async function (name, artist) {
-        const query = `${name} ${artist} site:cifraclub.com.br`;
-        const html = await fetchSearchHtml(query);
-        const candidates = parseSearchResults(html, name, artist);
+        const query = compactText(`${name} ${artist}`, 180);
+        const siteSearchQuery = `${query} site:cifraclub.com.br`;
+        const directCandidates = await searchCifraClubSuggest(name, artist);
+        let searchCandidates = [];
+
+        try {
+            const html = await fetchSearchHtml(siteSearchQuery);
+            searchCandidates = parseSearchResults(html, name, artist);
+        } catch (error) {
+            console.warn("[Cyphers] Falha na busca via DuckDuckGo, usando busca direta:", error.message);
+            debugLog("Erro detalhado na busca via DuckDuckGo", {
+                message: error.message,
+                stack: error.stack
+            });
+        }
+
+        const candidates = mergeCandidates(directCandidates, searchCandidates);
 
         debugLog("Resumo da extracao", {
             song: name,
             artist,
-            query,
+            query: siteSearchQuery,
+            directCandidateCount: directCandidates.length,
+            searchCandidateCount: searchCandidates.length,
             resultCount: candidates.length,
             topCandidates: candidates.slice(0, MAX_RESULTS)
         });
@@ -520,4 +630,3 @@ let cyphers = {
 }
 
 module.exports = cyphers;
-

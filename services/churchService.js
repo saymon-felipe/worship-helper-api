@@ -1034,7 +1034,12 @@ let churchService = {
                             u.id_usuario,
                             u.nome_usuario,
                             me.id_funcao,
-                            fi.nome_funcao AS user_occupation
+                            fi.nome_funcao AS user_occupation,
+                            (
+                                SELECT COUNT(*) 
+                                FROM anotacoes_membros_eventos ame 
+                                WHERE ame.id_evento = me.id_evento AND ame.id_usuario_membro = u.id_usuario
+                            ) AS quantidade_notas
                         FROM
                             usuario u
                         INNER JOIN
