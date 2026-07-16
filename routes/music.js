@@ -274,5 +274,18 @@ router.delete("/:music_id", login, validateParams(schemas.musicParams), async (r
     })
 })
 
+router.post("/editar-cifra/:music_id", login, validateParams(schemas.musicParams), validateBody(schemas.updateCipher), async (req, res, next) => {
+    if (!(await canUseMusicPermission(req, res, "music.cifra.edit"))) {
+        return;
+    }
+
+    _musicService.updateCipher(req.params.music_id, req.body.cipher_text).then(() => {
+        let response = functions.createResponse("Cifra atualizada com sucesso no banco de dados", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send(error.message || error);
+    });
+});
+
 module.exports = router;
 

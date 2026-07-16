@@ -11,7 +11,8 @@ const PERMISSION_TREE = {
     ],
     "music.manage": [
         "music.create",
-        "music.delete"
+        "music.delete",
+        "music.cifra.edit"
     ],
     "warnings.manage": [
         "warnings.create",
@@ -32,6 +33,7 @@ const PERMISSION_LABELS = [
     { key: "music.manage", label: "Gerenciar musicas", parent: null },
     { key: "music.create", label: "Cadastrar musicas", parent: "music.manage" },
     { key: "music.delete", label: "Remover musicas", parent: "music.manage" },
+    { key: "music.cifra.edit", label: "Editar cifras", parent: "music.manage" },
     { key: "warnings.manage", label: "Gerenciar avisos", parent: null },
     { key: "warnings.create", label: "Publicar avisos", parent: "warnings.manage" },
     { key: "warnings.edit", label: "Editar avisos", parent: "warnings.manage" },

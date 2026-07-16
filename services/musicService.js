@@ -584,6 +584,27 @@ let musicService = {
             })
         })
     },
+    updateCipher: function (music_id, cipher_text) {
+        return new Promise((resolve, reject) => {
+            const compressed = compressCipherText(cipher_text);
+            functions.executeSQL(
+                `
+                    UPDATE
+                        musicas
+                    SET
+                        cifra_conteudo = ?,
+                        cifra_encoding = 'gzip'
+                    WHERE
+                        id_musica = ?
+                `,
+                [compressed, music_id]
+            ).then(() => {
+                resolve();
+            }).catch((error) => {
+                reject(error);
+            });
+        });
+    },
     deleteMusic: async function (music_id) {
         // Exclui curtidas dos comentários da música
         await functions.executeSQL(

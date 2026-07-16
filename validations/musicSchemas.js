@@ -72,5 +72,9 @@ module.exports = {
     }),
     deleteMusicComment: Joi.object({
         id_comentario: id
+    }),
+    updateCipher: Joi.object({
+        id_igreja: id,
+        cipher_text: Joi.string().required()
     })
 };
