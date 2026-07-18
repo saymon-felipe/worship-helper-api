@@ -988,104 +988,106 @@ let churchService = {
             })
         })
     },
-    returnEvent: function (event_id, company_id) {
-        return new Promise((resolve, reject) => {
-            functions.executeSQL(
-                `
-                    SELECT
-                        e.id AS id_evento,
-                        e.id_criador,
-                        e.nome AS nome_evento,
-                        e.data_inicio AS data_inicio_evento,
-                        (
-                            SELECT
-                                ti.nome_tag
-                            FROM
-                                tags_igreja ti
-                            INNER JOIN
-                                tags_usuario tu
-                            ON
-                                ti.id_tag = tu.tags_usuario_id_tag_referencia
-                            WHERE
-                                ti.tags_id_igreja = ? AND tu.tags_usuario_id_usuario = e.id_criador
-                        ) AS criador_tag,
-                        COUNT(DISTINCT me.id) AS quantidade_membros,
-                        COUNT(DISTINCT mue.id) AS quantidade_musicas
-                    FROM
-                        eventos e
-                    INNER JOIN
-                        membros_eventos me
-                    ON
-                        me.id_evento = e.id
-                    INNER JOIN
-                        musicas_eventos mue
-                    ON
-                        mue.id_evento = e.id
-                    WHERE
-                        e.id_igreja = ?
-                    AND
-                        e.id = ?
-                `, [company_id, company_id, event_id]
-            ).then((results) => {                
-                functions.executeSQL(
-                    `
+    returnEvent: async function (event_id, company_id) {
+        const results = await functions.executeSQL(
+            `
+                SELECT
+                    e.id AS id_evento,
+                    e.id_criador,
+                    e.nome AS nome_evento,
+                    e.data_inicio AS data_inicio_evento,
+                    (
                         SELECT
-                            u.imagem_usuario,
-                            u.id_usuario,
-                            u.nome_usuario,
-                            me.id_funcao,
-                            fi.nome_funcao AS user_occupation,
-                            (
-                                SELECT COUNT(*) 
-                                FROM anotacoes_membros_eventos ame 
-                                WHERE ame.id_evento = me.id_evento AND ame.id_usuario_membro = u.id_usuario
-                            ) AS quantidade_notas
+                            ti.nome_tag
                         FROM
-                            usuario u
+                            tags_igreja ti
                         INNER JOIN
-                            membros_eventos me
+                            tags_usuario tu
                         ON
-                            me.id_usuario = u.id_usuario
-                        LEFT JOIN
-                            funcoes_igreja fi
-                        ON
-                            fi.id_funcoes_igreja = me.id_funcao
+                            ti.id_tag = tu.tags_usuario_id_tag_referencia
                         WHERE
-                            me.id_evento = ?
-                    `, [results[0].id_evento]
-                ).then((results2) => {
-                    results[0]["membros_evento"] = results2;
+                            ti.tags_id_igreja = ? AND tu.tags_usuario_id_usuario = e.id_criador
+                    ) AS criador_tag,
+                    COUNT(DISTINCT me.id) AS quantidade_membros,
+                    COUNT(DISTINCT mue.id) AS quantidade_musicas
+                FROM
+                    eventos e
+                LEFT JOIN
+                    membros_eventos me
+                ON
+                    me.id_evento = e.id
+                LEFT JOIN
+                    musicas_eventos mue
+                ON
+                    mue.id_evento = e.id
+                WHERE
+                    e.id_igreja = ?
+                AND
+                    e.id = ?
+                GROUP BY
+                    e.id
+            `, [company_id, company_id, event_id]
+        );
 
-                    functions.executeSQL(
-                        `
-                            SELECT
-                                m.nome_musica,
-                                m.artista_musica,
-                                m.imagem AS imagem_musica,
-                                m.id_musica,
-                                t.id AS id_tom,
-                                t.nome AS tom
-                            FROM
-                                musicas m
-                            INNER JOIN
-                                musicas_eventos me
-                            ON
-                                me.id_musica = m.id_musica
-                            LEFT JOIN
-                                tons t
-                            ON
-                                me.tom = t.id
-                            WHERE
-                                me.id_evento = ?
-                        `, [results[0].id_evento]
-                    ).then((results3) => {
-                        results[0]["musicas"] = results3;
+        if (results.length <= 0) {
+            throw "Evento nao encontrado";
+        }
 
-                        resolve(results[0]);
-                    })
-                })
-            })
-        })
+        const event = results[0];
+
+        event["membros_evento"] = await functions.executeSQL(
+            `
+                SELECT
+                    u.imagem_usuario,
+                    u.id_usuario,
+                    u.nome_usuario,
+                    me.id_funcao,
+                    fi.nome_funcao AS user_occupation,
+                    (
+                        SELECT COUNT(*)
+                        FROM anotacoes_membros_eventos ame
+                        WHERE ame.id_evento = me.id_evento AND ame.id_usuario_membro = u.id_usuario
+                    ) AS quantidade_notas
+                FROM
+                    usuario u
+                INNER JOIN
+                    membros_eventos me
+                ON
+                    me.id_usuario = u.id_usuario
+                LEFT JOIN
+                    funcoes_igreja fi
+                ON
+                    fi.id_funcoes_igreja = me.id_funcao
+                WHERE
+                    me.id_evento = ?
+            `, [event.id_evento]
+        );
+
+        event["musicas"] = await functions.executeSQL(
+            `
+                SELECT
+                    m.nome_musica,
+                    m.artista_musica,
+                    m.imagem AS imagem_musica,
+                    m.id_musica,
+                    t.id AS id_tom,
+                    t.nome AS tom
+                FROM
+                    musicas m
+                INNER JOIN
+                    musicas_eventos me
+                ON
+                    me.id_musica = m.id_musica
+                LEFT JOIN
+                    tons t
+                ON
+                    me.tom = t.id
+                WHERE
+                    me.id_evento = ?
+            `, [event.id_evento]
+        );
+
+        return event;
     },
     returnTones: function (music_id, company_id) {
         return new Promise((resolve, reject) => {
