@@ -4,6 +4,7 @@ const login = require("../middleware/login");
 const uploadConfig = require("../config/upload.js");
 const functions = require("../functions/functions.js");
 const _churchService = require("../services/churchService");
+const _pushNotificationService = require("../services/pushNotificationService");
 const _permissions = require("../functions/permissions.js");
 const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/churchSchemas");
@@ -208,6 +209,14 @@ router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, 
         }
 
         _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario, req.body.parent_id).then(() => {
+            if (!req.body.parent_id) {
+                _pushNotificationService.notifyChurchWarning({
+                    churchId: req.body.id_igreja,
+                    actorId: req.usuario.id_usuario,
+                    message: req.body.mensagem
+                }).catch((error) => console.error("[Push] Falha ao notificar aviso:", error.message));
+            }
+
             let response = functions.createResponse("Aviso criado com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
@@ -468,7 +477,14 @@ router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req,
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(() => {
+        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then((event) => {
+            _pushNotificationService.notifyEventCreated({
+                eventId: event.id_evento,
+                churchId: req.body.id_igreja,
+                actorId: req.usuario.id_usuario,
+                eventName: req.body.event_name
+            }).catch((error) => console.error("[Push] Falha ao notificar evento:", error.message));
+
             let response = functions.createResponse("Evento cadastrado com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
@@ -526,6 +542,12 @@ router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComme
                 }
 
                 _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id).then(() => {
+                    _pushNotificationService.notifyEventComment({
+                        eventId: req.body.id_evento,
+                        actorId: req.usuario.id_usuario,
+                        message: req.body.mensagem
+                    }).catch((error) => console.error("[Push] Falha ao notificar comentario do evento:", error.message));
+
                     let response = functions.createResponse("Comentario criado com sucesso", null, "POST", 200);
                     return res.status(200).send(response);
                 }).catch((error) => {

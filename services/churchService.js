@@ -259,7 +259,7 @@ let churchService = {
                     reject("Não foi possível publicar o aviso");
                 }
 
-                resolve();
+                resolve({ id_aviso: results.insertId });
             }).catch((error) => {
                 reject(error);
             })
@@ -759,7 +759,7 @@ let churchService = {
                 }
 
                 Promise.all(promises).then(() => {
-                    resolve();
+                    resolve({ id_evento: results.insertId });
                 }).catch((error) => {
                     reject(error);
                 })

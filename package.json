@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node -e \"require('./database/migrate').runMigrations().catch((error) => { console.error(error); process.exit(1); })\"",
-    "test": "node --check server.js && node --check app.js"
+    "test": "node --check server.js && node --check app.js",
+    "generate:vapid": "web-push generate-vapid-keys"
   },
   "engines": {
     "node": ">=22.0.0",
@@ -38,7 +39,8 @@
     "mysql2": "^3.22.6",
     "node-cache": "^5.1.2",
     "nodemailer": "^6.9.16",
-    "openai": "^6.45.0"
+    "openai": "^6.45.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

@@ -8,6 +8,7 @@ const _permissions = require("../functions/permissions.js");
 const { validateBody } = require("../middleware/validate");
 const schemas = require("../validations/usuarioSchemas");
 const { requireAppAdministrator } = require("../functions/authClaims");
+const _pushNotificationService = require("../services/pushNotificationService");
 router.get("/return_user", login, (req, res, next) => {
     _usuarioService.returnUser(req.usuario.id_usuario).then((results) => {
         let response = functions.createResponse("Retorno do usuário " + results.id_usuario, results, "GET", 200);
@@ -159,6 +160,32 @@ router.post('/check_jwt', login, validateBody(schemas.checkJwt), (req, res, next
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
+    })
+})
+router.get("/push/public-key", login, (req, res, next) => {
+    try {
+        const response = functions.createResponse("Chave publica de notificacoes", {
+            publicKey: _pushNotificationService.getPublicKey()
+        }, "GET", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(503).send({ error: error.message });
+    }
+})
+router.post("/push/subscription", login, validateBody(schemas.pushSubscription), (req, res, next) => {
+    _pushNotificationService.saveSubscription(req.usuario.id_usuario, req.body.subscription).then(() => {
+        const response = functions.createResponse("Notificacoes ativadas neste dispositivo", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send({ error: error.message || error });
+    })
+})
+router.post("/push/unsubscribe", login, validateBody(schemas.pushUnsubscribe), (req, res, next) => {
+    _pushNotificationService.removeSubscription(req.usuario.id_usuario, req.body.endpoint).then(() => {
+        const response = functions.createResponse("Notificacoes removidas deste dispositivo", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(500).send({ error: error.message || error });
     })
 })
 module.exports = router;

@@ -7,6 +7,7 @@ const ciphers = require("../functions/cyphers.js");
 const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/musicSchemas");
 const _permissions = require("../functions/permissions.js");
+const _pushNotificationService = require("../services/pushNotificationService");
 
 async function canUseMusicPermission(req, res, permissionKey) {
     if (req.usuario && req.usuario.app_owner) {
@@ -132,6 +133,12 @@ router.post("/comentarios-evento/criar", login, validateBody(schemas.createEvent
         }
 
         await _musicService.postEventMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.id_evento, req.body.parent_id);
+        _pushNotificationService.notifyEventMusicComment({
+            eventId: req.body.id_evento,
+            musicId: req.body.id_musica,
+            actorId: req.usuario.id_usuario,
+            message: req.body.mensagem
+        }).catch((error) => console.error("[Push] Falha ao notificar comentario da musica no evento:", error.message));
         let response = functions.createResponse("Comentário da música no evento criado com sucesso", null, "POST", 200);
         return res.status(200).send(response);
     } catch (error) {

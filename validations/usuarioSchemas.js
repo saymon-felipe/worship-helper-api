@@ -31,5 +31,18 @@ module.exports = {
     }),
     checkJwt: Joi.object({
         token: Joi.string().trim().required()
+    }),
+    pushSubscription: Joi.object({
+        subscription: Joi.object({
+            endpoint: Joi.string().uri().required(),
+            expirationTime: Joi.any().allow(null),
+            keys: Joi.object({
+                p256dh: Joi.string().required(),
+                auth: Joi.string().required()
+            }).required()
+        }).required()
+    }),
+    pushUnsubscribe: Joi.object({
+        endpoint: Joi.string().uri().required()
     })
 };
