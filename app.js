@@ -26,6 +26,7 @@ app.use((req, res, next) => {
         ...parseOrigins(process.env.URL_SITE),
         ...parseOrigins(process.env.URL_APP),
         'http://localhost:8080',
+        'http://192.168.0.7:8080',
         'http://localhost:8081',
         'http://localhost:5174',
         'http://localhost:5175'
