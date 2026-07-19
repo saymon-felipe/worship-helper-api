@@ -8,11 +8,11 @@ const PUSH_NOTIFICATION_MESSAGES = Object.freeze({
         body: (message) => message
     }),
     EVENT_COMMENT: Object.freeze({
-        title: (eventName) => "Novo comentario em " + eventName,
+        title: (eventName) => "Novo comentario no evento " + eventName,
         body: (message) => message
     }),
     EVENT_MUSIC_COMMENT: Object.freeze({
-        title: (musicName) => "Novo comentario em " + musicName,
+        title: (musicName) => "Novo comentario na música " + musicName,
         body: (message) => message
     }),
     INVITE_ACCEPTED: Object.freeze({
