@@ -14,15 +14,22 @@ app.use(morgan('dev'));
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+function parseOrigins(value) {
+    return (value || '')
+        .split(',')
+        .map(origin => origin.trim().replace(/\/$/, ''))
+        .filter(Boolean);
+}
+
 app.use((req, res, next) => {
-    const envOrigins = (process.env.URL_SITE || '').split(',').map(o => o.trim());
-    const allowedOrigins = [
-        ...envOrigins,
+    const allowedOrigins = [...new Set([
+        ...parseOrigins(process.env.URL_SITE),
+        ...parseOrigins(process.env.URL_APP),
         'http://localhost:8080',
         'http://localhost:8081',
         'http://localhost:5174',
         'http://localhost:5175'
-    ].map(o => o && o.replace(/\/$/, '')).filter(Boolean);
+    ].map(origin => origin.replace(/\/$/, '')).filter(Boolean))];
 
     const origin = req.headers.origin;
     if (origin) {

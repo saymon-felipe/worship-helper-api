@@ -38,8 +38,8 @@ function getTransportConfig() {
     };
 }
 
-function getFrontendUrl() {
-    return (process.env.URL_SITE || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
+function getAppUrl() {
+    return (process.env.URL_APP || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
 }
 
 function getApiUrl() {
@@ -59,7 +59,7 @@ async function sendChurchInvite({ to, churchName, inviterName }) {
 
     try {
         const transporter = nodemailer.createTransport(transportConfig);
-        const inviteUrl = `${getFrontendUrl()}/register?email=${encodeURIComponent(to)}&invite=church`;
+        const inviteUrl = `${getAppUrl()}/register?email=${encodeURIComponent(to)}&invite=church`;
 
         console.log(`[EMAIL_SERVICE] Link de convite gerado: ${inviteUrl}`);
 
