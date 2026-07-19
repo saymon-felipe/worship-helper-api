@@ -66,7 +66,13 @@ router.post("/rejeita-convite", login, validateBody(schemas.churchId), (req, res
     })
 })
 router.post("/aceita-convite", login, validateBody(schemas.churchId), (req, res, next) => {
-    _usuarioService.acceptInvite(req.body.id_igreja, req.usuario.id_usuario).then(() => {
+    _usuarioService.acceptInvite(req.body.id_igreja, req.usuario.id_usuario).then((invite) => {
+        _pushNotificationService.notifyInviteAccepted({
+            churchId: req.body.id_igreja,
+            memberId: req.usuario.id_usuario,
+            inviterId: invite.id_usuario_requisitante
+        }).catch((error) => console.error("[Push] Falha ao notificar convite aceito:", error.message));
+
         let response = functions.createResponse("Convite aceito com sucesso", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {

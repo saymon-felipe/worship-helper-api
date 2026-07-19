@@ -457,7 +457,20 @@ let churchService = {
     },
     sendInvite: async function (company_id, user_id, requesting_user_id, email_usuario = "") {
         const normalizedEmail = String(email_usuario || "").trim().toLowerCase();
-        const requestedUserId = user_id ? Number(user_id) : null;
+        let requestedUserId = user_id ? Number(user_id) : null;
+        let existingUser = Boolean(requestedUserId);
+
+        if (!requestedUserId && normalizedEmail) {
+            const [user] = await functions.executeSQL(
+                "SELECT id_usuario FROM usuario WHERE LOWER(email_usuario) = ? LIMIT 1",
+                [normalizedEmail]
+            );
+
+            if (user) {
+                requestedUserId = Number(user.id_usuario);
+                existingUser = true;
+            }
+        }
 
         if (!requestedUserId && !normalizedEmail) {
             throw "Selecione um usuario ou informe um e-mail valido";
@@ -540,7 +553,8 @@ let churchService = {
                 await _emailService.sendChurchInvite({
                     to: targetEmail,
                     churchName,
-                    inviterName
+                    inviterName,
+                    existingUser
                 });
                 console.log(`[CHURCH_SERVICE] Disparo concluído com sucesso para: ${targetEmail}`);
             } else {

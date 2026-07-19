@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const webpush = require("web-push");
 const functions = require("../functions/functions");
+const PUSH_NOTIFICATION_MESSAGES = require("../constants/pushNotificationMessages");
 
 let vapidConfigured = false;
 
@@ -130,8 +131,8 @@ const pushNotificationService = {
     async notifyEventCreated({ eventId, churchId, actorId, eventName }) {
         const recipients = await getEventRecipients(eventId, actorId);
         await sendToUsers(recipients.map((recipient) => recipient.id_usuario), {
-            title: "Novo evento",
-            body: "Voce foi adicionado ao evento " + eventName + ".",
+            title: PUSH_NOTIFICATION_MESSAGES.EVENT_CREATED.title,
+            body: PUSH_NOTIFICATION_MESSAGES.EVENT_CREATED.body(eventName),
             url: "/home/event/" + eventId + "?church=" + churchId,
             tag: "event-" + eventId
         });
@@ -144,8 +145,8 @@ const pushNotificationService = {
         `, [churchId, actorId]);
 
         await sendToUsers(recipients.map((recipient) => recipient.id_usuario), {
-            title: "Novo aviso da igreja",
-            body: truncateMessage(message),
+            title: PUSH_NOTIFICATION_MESSAGES.CHURCH_WARNING.title,
+            body: PUSH_NOTIFICATION_MESSAGES.CHURCH_WARNING.body(truncateMessage(message)),
             url: "/home/church/" + churchId,
             tag: "church-warning-" + churchId
         });
@@ -158,8 +159,8 @@ const pushNotificationService = {
 
         const recipients = await getEventRecipients(eventId, actorId);
         await sendToUsers(recipients.map((recipient) => recipient.id_usuario), {
-            title: "Novo comentario em " + event.nome,
-            body: truncateMessage(message),
+            title: PUSH_NOTIFICATION_MESSAGES.EVENT_COMMENT.title(event.nome),
+            body: PUSH_NOTIFICATION_MESSAGES.EVENT_COMMENT.body(truncateMessage(message)),
             url: "/home/event/" + eventId + "?church=" + event.id_igreja,
             tag: "event-comment-" + eventId
         });
@@ -173,10 +174,33 @@ const pushNotificationService = {
 
         const recipients = await getEventRecipients(eventId, actorId);
         await sendToUsers(recipients.map((recipient) => recipient.id_usuario), {
-            title: "Novo comentario em " + music.nome_musica,
-            body: truncateMessage(message),
+            title: PUSH_NOTIFICATION_MESSAGES.EVENT_MUSIC_COMMENT.title(music.nome_musica),
+            body: PUSH_NOTIFICATION_MESSAGES.EVENT_MUSIC_COMMENT.body(truncateMessage(message)),
             url: "/home/musics/" + musicId + "?event=" + eventId + "&church=" + event.id_igreja,
             tag: "event-music-comment-" + eventId + "-" + musicId
+        });
+    },
+    async notifyInviteAccepted({ churchId, memberId, inviterId }) {
+        const [church] = await functions.executeSQL(`
+            SELECT nome_igreja, usuario_administrador
+            FROM igreja
+            WHERE id_igreja = ?
+        `, [churchId]);
+        const [member] = await functions.executeSQL(`
+            SELECT nome_usuario
+            FROM usuario
+            WHERE id_usuario = ?
+        `, [memberId]);
+
+        if (!church || !member) {
+            return;
+        }
+
+        await sendToUsers([inviterId, church.usuario_administrador].filter((id) => Number(id) !== Number(memberId)), {
+            title: PUSH_NOTIFICATION_MESSAGES.INVITE_ACCEPTED.title,
+            body: PUSH_NOTIFICATION_MESSAGES.INVITE_ACCEPTED.body(member.nome_usuario, church.nome_igreja),
+            url: "/home/church/" + churchId,
+            tag: "invite-accepted-" + churchId + "-" + memberId
         });
     }
 };

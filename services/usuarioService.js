@@ -161,8 +161,15 @@ let usuarioService = {
                                 email_usuario: user_email
                             }
 
-                            // Save lead to database
-                            functions.executeSQL(
+                            functions.executeSQL(`
+                                UPDATE convites_membros_igreja
+                                SET id_usuario_requisitado = ?
+                                WHERE id_usuario_requisitado IS NULL
+                                AND LOWER(email_usuario_requisitado) = LOWER(?)
+                                AND data_confirmacao IS NULL
+                            `, [results2.insertId, user_email]).then(() => {
+                                // Save lead to database
+                                functions.executeSQL(
                                 `INSERT INTO leads 
                                     (nome, email, telefone, origem, tipo_equipe, nome_igreja) 
                                  VALUES 
@@ -174,7 +181,10 @@ let usuarioService = {
                                 console.error('[LEADS ERROR] Failed to save app registration lead to database:', err);
                             });
 
-                            resolve(usuario_criado);
+                                resolve(usuario_criado);
+                            }).catch((error3) => {
+                                reject(error3);
+                            });
                         })
                         .catch((error2) => {
                             reject(error2);
@@ -235,7 +245,8 @@ let usuarioService = {
         const invites = await functions.executeSQL(
             `
                 SELECT
-                    id
+                    id,
+                    id_usuario_requisitante
                 FROM
                     convites_membros_igreja
                 WHERE
@@ -264,6 +275,10 @@ let usuarioService = {
             `,
             [invites[0].id]
         );
+
+        return {
+            id_usuario_requisitante: invites[0].id_usuario_requisitante
+        };
     },
     returnInvites: function (user_id) {
         return new Promise((resolve, reject) => {

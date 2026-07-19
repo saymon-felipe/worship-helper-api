@@ -1,5 +1,6 @@
 const nodemailer = require("nodemailer");
 const createInviteHtml = require("../templates/invite");
+const createExistingUserInviteHtml = require("../templates/inviteExistingUser");
 
 function getMailUser() {
     return process.env.USER_EMAIL || process.env.EMAIL_USER || process.env.MAIL_USER || process.env.SMTP_USER || "";
@@ -46,7 +47,7 @@ function getApiUrl() {
     return (process.env.URL_API || "http://localhost:3000").replace(/\/$/, "");
 }
 
-async function sendChurchInvite({ to, churchName, inviterName }) {
+async function sendChurchInvite({ to, churchName, inviterName, existingUser = false }) {
     console.log(`[EMAIL_SERVICE] Iniciando envio de convite para: ${to}`);
     const transportConfig = getTransportConfig();
 
@@ -59,7 +60,9 @@ async function sendChurchInvite({ to, churchName, inviterName }) {
 
     try {
         const transporter = nodemailer.createTransport(transportConfig);
-        const inviteUrl = `${getAppUrl()}/register?email=${encodeURIComponent(to)}&invite=church`;
+        const inviteUrl = existingUser
+            ? `${getAppUrl()}/login?invite=church`
+            : `${getAppUrl()}/register?email=${encodeURIComponent(to)}&invite=church`;
 
         console.log(`[EMAIL_SERVICE] Link de convite gerado: ${inviteUrl}`);
 
@@ -67,7 +70,9 @@ async function sendChurchInvite({ to, churchName, inviterName }) {
             from: `"Worship Helper" <${getMailUser().trim()}>`,
             to,
             subject: `Convite para participar da igreja ${churchName}`,
-            html: createInviteHtml({ churchName, inviterName, inviteUrl, apiUrl: getApiUrl() }),
+            html: existingUser
+                ? createExistingUserInviteHtml({ churchName, inviterName, loginUrl: inviteUrl, apiUrl: getApiUrl() })
+                : createInviteHtml({ churchName, inviterName, inviteUrl, apiUrl: getApiUrl() }),
             text: `${inviterName} convidou você para participar da igreja ${churchName} no Worship Helper. Crie sua conta: ${inviteUrl}`
         });
 
