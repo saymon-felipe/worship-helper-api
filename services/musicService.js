@@ -196,7 +196,7 @@ let musicService = {
             })
         })
     },
-    createMusic: async function (name, artist, video_url, cipher_url, cipher_title, thumbnail, music_tags) {
+    createMusic: async function (church_id, name, artist, video_url, cipher_url, cipher_title, thumbnail, music_tags) {
         const results = await functions.executeSQL(
             `
                 SELECT
@@ -204,9 +204,9 @@ let musicService = {
                 FROM
                     musicas
                 WHERE
-                    LOWER(nome_musica) = ? AND LOWER(artista_musica) = ?
+                    id_igreja = ? AND LOWER(nome_musica) = ? AND LOWER(artista_musica) = ?
             `,
-            [name.toLowerCase(), artist.toLowerCase()]
+            [church_id, name.toLowerCase(), artist.toLowerCase()]
         );
 
         if (results.length > 0) {
@@ -227,16 +227,16 @@ let musicService = {
             `
                 INSERT INTO
                     musicas
-                    (nome_musica, artista_musica, video_url, cifra_url, cifra_titulo, cifra_conteudo, cifra_encoding, imagem, video_id)
+                    (id_igreja, nome_musica, artista_musica, video_url, cifra_url, cifra_titulo, cifra_conteudo, cifra_encoding, imagem, video_id)
                 VALUES
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
-            [name, artist, video_url, cipher_url, resolvedCipherTitle, compressedCipher, "gzip", thumbnail, videoId]
+            [church_id, name, artist, video_url, cipher_url, resolvedCipherTitle, compressedCipher, "gzip", thumbnail, videoId]
         );
 
         await this.insertMusicTags(inserted.insertId, music_tags);
     },
-    returnMusics: function () {
+    returnMusics: function (church_id) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(
                 `
@@ -244,7 +244,9 @@ let musicService = {
                         m.*
                     FROM
                         musicas m
-                `
+                    WHERE
+                        m.id_igreja = ?
+                `, [church_id]
             ).then((results) => {
                 functions.returnFormattedMusics(results).then((results2) => {
                     resolve(results2);
@@ -256,7 +258,7 @@ let musicService = {
             })
         })
     },
-    returnMusic: function (music_id, event_id = 0) {
+    returnMusic: function (music_id, church_id, event_id = 0) {
         return new Promise((resolve, reject) => {
             functions.executeSQL(
                 `
@@ -281,7 +283,9 @@ let musicService = {
                         musicas m
                     WHERE
                         m.id_musica = ?
-                `, [event_id, event_id, music_id]
+                    AND
+                        m.id_igreja = ?
+                `, [event_id, event_id, music_id, church_id]
             ).then((results) => {
                 functions.returnFormattedMusics(results).then((results2) => {
                     if (!results2[0]) {
@@ -299,6 +303,14 @@ let musicService = {
                 reject(error);
             })
         })
+    },
+    musicBelongsToChurch: async function (music_id, church_id) {
+        const results = await functions.executeSQL(
+            `SELECT id_musica FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
+            [music_id, church_id]
+        );
+
+        return results.length > 0;
     },
     returnMusicComments: function (music_id, user_id) {
         return new Promise((resolve, reject) => {
@@ -584,7 +596,7 @@ let musicService = {
             })
         })
     },
-    updateCipher: function (music_id, cipher_text) {
+    updateCipher: function (music_id, church_id, cipher_text) {
         return new Promise((resolve, reject) => {
             const compressed = compressCipherText(cipher_text);
             functions.executeSQL(
@@ -596,16 +608,31 @@ let musicService = {
                         cifra_encoding = 'gzip'
                     WHERE
                         id_musica = ?
+                    AND
+                        id_igreja = ?
                 `,
-                [compressed, music_id]
-            ).then(() => {
+                [compressed, music_id, church_id]
+            ).then((result) => {
+                if (result.affectedRows === 0) {
+                    reject(new Error("Música não encontrada"));
+                    return;
+                }
                 resolve();
             }).catch((error) => {
                 reject(error);
             });
         });
     },
-    deleteMusic: async function (music_id) {
+    deleteMusic: async function (music_id, church_id) {
+        const [music] = await functions.executeSQL(
+            `SELECT id_musica FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
+            [music_id, church_id]
+        );
+
+        if (!music) {
+            throw new Error("Música não encontrada ou já excluída");
+        }
+
         // Exclui curtidas dos comentários da música
         await functions.executeSQL(
             `DELETE FROM curtidas_comentarios_musicas WHERE id_comentario IN (SELECT id FROM comentarios_musica WHERE id_musica = ?)`
@@ -628,8 +655,8 @@ let musicService = {
         );
         // Exclui a música
         const result = await functions.executeSQL(
-            `DELETE FROM musicas WHERE id_musica = ?`
-            , [music_id]
+            `DELETE FROM musicas WHERE id_musica = ? AND id_igreja = ?`
+            , [music_id, church_id]
         );
         
         if (result.affectedRows === 0) {

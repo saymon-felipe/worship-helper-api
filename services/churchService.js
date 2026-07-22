@@ -1074,7 +1074,9 @@ let churchService = {
                     fi.id_funcoes_igreja = me.id_funcao
                 WHERE
                     me.id_evento = ?
-            `, [event.id_evento]
+                AND
+                    m.id_igreja = ?
+            `, [event.id_evento, company_id]
         );
 
         event["musicas"] = await functions.executeSQL(

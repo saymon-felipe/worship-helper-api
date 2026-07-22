@@ -4,7 +4,7 @@ const login = require("../middleware/login");
 const functions = require("../functions/functions.js");
 const _musicService = require("../services/musicService");
 const ciphers = require("../functions/cyphers.js");
-const { validateBody, validateParams } = require("../middleware/validate");
+const { validateBody, validateParams, validateQuery } = require("../middleware/validate");
 const schemas = require("../validations/musicSchemas");
 const _permissions = require("../functions/permissions.js");
 const _pushNotificationService = require("../services/pushNotificationService");
@@ -14,7 +14,7 @@ async function canUseMusicPermission(req, res, permissionKey) {
         return true;
     }
 
-    const churchId = req.body.id_igreja || req.query.id_igreja;
+    const churchId = (req.body && req.body.id_igreja) || (req.query && req.query.id_igreja);
     if (!churchId) {
         res.status(401).send("Acesso negado");
         return false;
@@ -32,6 +32,45 @@ async function canUseMusicPermission(req, res, permissionKey) {
 
     res.status(401).send("Acesso negado");
     return false;
+}
+
+async function canAccessChurchMusic(req, res) {
+    if (req.usuario && req.usuario.app_owner) {
+        return true;
+    }
+
+    const churchId = (req.body && req.body.id_igreja) || (req.query && req.query.id_igreja);
+    if (!churchId) {
+        res.status(401).send("Acesso negado");
+        return false;
+    }
+
+    try {
+        const permission = await _permissions.checkPermission(req.usuario.id_usuario, churchId);
+        if (permission.administrador || permission.apenas_membro) {
+            return true;
+        }
+    } catch (error) {
+        res.status(401).send(error);
+        return false;
+    }
+
+    res.status(401).send("Acesso negado");
+    return false;
+}
+
+async function canAccessRequestedMusic(req, res) {
+    if (!(await canAccessChurchMusic(req, res))) {
+        return false;
+    }
+
+    const belongsToChurch = await _musicService.musicBelongsToChurch(req.body.id_musica, req.body.id_igreja);
+    if (!belongsToChurch) {
+        res.status(404).send("Música não encontrada");
+        return false;
+    }
+
+    return true;
 }
 
 router.post("/procurar", login, validateBody(schemas.search), async (req, res, next) => {
@@ -65,7 +104,7 @@ router.post("/", login, validateBody(schemas.create), async (req, res, next) => 
         return;
     }
 
-    _musicService.createMusic(req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(() => {
+    _musicService.createMusic(req.body.id_igreja, req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(() => {
         let response = functions.createResponse("Musica cadastrada com sucesso no banco de dados", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
@@ -73,8 +112,12 @@ router.post("/", login, validateBody(schemas.create), async (req, res, next) => 
     })
 })
 
-router.get("/", login, (req, res, next) => {
-    _musicService.returnMusics().then((results) => {
+router.get("/", login, validateQuery(schemas.library), async (req, res, next) => {
+    if (!(await canAccessChurchMusic(req, res))) {
+        return;
+    }
+
+    _musicService.returnMusics(req.query.id_igreja).then((results) => {
         let response = functions.createResponse("Retorno de todas as musicas", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
@@ -82,8 +125,15 @@ router.get("/", login, (req, res, next) => {
     })
 })
 
-router.post("/retorna_musica/:music_id", login, validateParams(schemas.musicParams), validateBody(schemas.returnMusic), (req, res, next) => {
-    _musicService.returnMusic(req.params.music_id, req.body.event_id).then((results) => {
+router.post("/retorna_musica/:music_id", login, validateParams(schemas.musicParams), validateBody(schemas.returnMusic), async (req, res, next) => {
+    if (!(await canAccessChurchMusic(req, res))) {
+        return;
+    }
+
+    _musicService.returnMusic(req.params.music_id, req.body.id_igreja, req.body.event_id).then((results) => {
+        if (!results) {
+            return res.status(404).send("Música não encontrada");
+        }
         let response = functions.createResponse("Retorno da música " + req.params.music_id, results, "GET", 200);
         return res.status(200).send(response);
     }).catch((error) => {
@@ -91,7 +141,11 @@ router.post("/retorna_musica/:music_id", login, validateParams(schemas.musicPara
     })
 })
 
-router.post("/comentarios/criar", login, validateBody(schemas.createComment), (req, res, next) => {
+router.post("/comentarios/criar", login, validateBody(schemas.createComment), async (req, res, next) => {
+    if (!(await canAccessRequestedMusic(req, res))) {
+        return;
+    }
+
     _musicService.postMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.parent_id).then(() => {
         let response = functions.createResponse("Comentario criado com sucesso", null, "POST", 200);
         return res.status(200).send(response);
@@ -100,7 +154,11 @@ router.post("/comentarios/criar", login, validateBody(schemas.createComment), (r
     })
 })
 
-router.post("/comentarios/retorna", login, validateBody(schemas.returnComments), (req, res, next) => {
+router.post("/comentarios/retorna", login, validateBody(schemas.returnComments), async (req, res, next) => {
+    if (!(await canAccessRequestedMusic(req, res))) {
+        return;
+    }
+
     _musicService.returnMusicComments(req.body.id_musica, req.usuario.id_usuario).then((results) => {
         let response = functions.createResponse("Retorno dos comentários da música", results, "POST", 200);
         return res.status(200).send(response);
@@ -109,7 +167,11 @@ router.post("/comentarios/retorna", login, validateBody(schemas.returnComments),
     })
 })
 
-router.post("/comentarios/like", login, validateBody(schemas.likeComment), (req, res, next) => {
+router.post("/comentarios/like", login, validateBody(schemas.likeComment), async (req, res, next) => {
+    if (!(await canAccessRequestedMusic(req, res))) {
+        return;
+    }
+
     _musicService.likeComment(req.body.id_aviso, req.usuario.id_usuario).then(() => {
         let response = functions.createResponse("Curtida no comentário da música feita com sucesso", null, "POST", 200);
         return res.status(200).send(response);
@@ -214,7 +276,11 @@ router.post("/comentarios-evento/deletar", login, validateBody(schemas.deleteEve
     }
 })
 
-router.post("/comentarios/editar", login, validateBody(schemas.updateMusicComment), (req, res, next) => {
+router.post("/comentarios/editar", login, validateBody(schemas.updateMusicComment), async (req, res, next) => {
+    if (!(await canAccessRequestedMusic(req, res))) {
+        return;
+    }
+
     functions.executeSQL(`SELECT id_usuario FROM comentarios_musica WHERE id = ?`, [req.body.id_comentario])
     .then((results) => {
         const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
@@ -234,7 +300,11 @@ router.post("/comentarios/editar", login, validateBody(schemas.updateMusicCommen
     });
 })
 
-router.post("/comentarios/deletar", login, validateBody(schemas.deleteMusicComment), (req, res, next) => {
+router.post("/comentarios/deletar", login, validateBody(schemas.deleteMusicComment), async (req, res, next) => {
+    if (!(await canAccessRequestedMusic(req, res))) {
+        return;
+    }
+
     functions.executeSQL(`SELECT id_usuario FROM comentarios_musica WHERE id = ?`, [req.body.id_comentario])
     .then((results) => {
         const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
@@ -273,7 +343,7 @@ router.delete("/:music_id", login, validateParams(schemas.musicParams), async (r
         return;
     }
 
-    _musicService.deleteMusic(req.params.music_id).then(() => {
+    _musicService.deleteMusic(req.params.music_id, req.body.id_igreja).then(() => {
         let response = functions.createResponse("Musica excluida com sucesso", null, "DELETE", 200);
         return res.status(200).send(response);
     }).catch((error) => {
@@ -286,7 +356,7 @@ router.post("/editar-cifra/:music_id", login, validateParams(schemas.musicParams
         return;
     }
 
-    _musicService.updateCipher(req.params.music_id, req.body.cipher_text).then(() => {
+    _musicService.updateCipher(req.params.music_id, req.body.id_igreja, req.body.cipher_text).then(() => {
         let response = functions.createResponse("Cifra atualizada com sucesso no banco de dados", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {

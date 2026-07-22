@@ -216,6 +216,7 @@ async function up(query) {
     await query(`
         CREATE TABLE IF NOT EXISTS musicas (
             id_musica INT NOT NULL AUTO_INCREMENT,
+            id_igreja INT NOT NULL,
             nome_musica VARCHAR(50) NOT NULL,
             artista_musica VARCHAR(50) NOT NULL DEFAULT '',
             video_url VARCHAR(100) NOT NULL,
@@ -223,8 +224,12 @@ async function up(query) {
             imagem VARCHAR(100) NOT NULL,
             video_id VARCHAR(20) NOT NULL,
             PRIMARY KEY (id_musica),
+            UNIQUE KEY uk_musicas_igreja_nome_artista (id_igreja, nome_musica, artista_musica),
+            KEY idx_musicas_igreja (id_igreja),
             KEY idx_video_id (video_id),
-            KEY idx_music_informations (nome_musica, artista_musica)
+            KEY idx_music_informations (nome_musica, artista_musica),
+            CONSTRAINT fk_musicas_igreja
+                FOREIGN KEY (id_igreja) REFERENCES igreja (id_igreja) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
