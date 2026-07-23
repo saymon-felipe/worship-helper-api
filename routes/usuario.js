@@ -108,6 +108,14 @@ router.post("/biometria/registro/verificar", login, validateBody(schemas.biometr
         return res.status(400).send({ error: error.message || "Não foi possível ativar a biometria." });
     }
 });
+router.get("/biometria/status", login, async (req, res) => {
+    try {
+        const hasCredential = await _webAuthnService.hasCredentials(req.usuario.id_usuario);
+        return res.status(200).send(functions.createResponse("Status da biometria retornado", { hasCredential }, "GET", 200));
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Não foi possível consultar a biometria." });
+    }
+});
 router.post("/biometria/login/opcoes", validateBody(schemas.biometricEmail), async (req, res) => {
     try {
         const options = await _webAuthnService.authenticationOptions(req.body.email_usuario);

@@ -48,6 +48,11 @@ async function getCredentials(userId) {
     }));
 }
 
+async function hasCredentials(userId) {
+    const credentials = await getCredentials(userId);
+    return credentials.length > 0;
+}
+
 async function saveChallenge(userId, type, challenge) {
     await functions.executeSQL("DELETE FROM webauthn_challenges WHERE id_usuario = ? AND tipo = ?", [userId, type]);
     await functions.executeSQL(`
@@ -182,5 +187,6 @@ module.exports = {
     registrationOptions,
     verifyRegistration,
     authenticationOptions,
-    verifyAuthentication
+    verifyAuthentication,
+    hasCredentials
 };
