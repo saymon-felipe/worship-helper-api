@@ -25,7 +25,7 @@ const PERMISSION_LABELS = [
     { key: "members.manage", label: "Gerenciar membros", parent: null },
     { key: "members.invite", label: "Convidar membros", parent: "members.manage" },
     { key: "members.remove", label: "Remover membros", parent: "members.manage" },
-    { key: "members.roles", label: "Alterar cargos", parent: "members.manage" },
+    { key: "members.roles", label: "Alterar funções", parent: "members.manage" },
     { key: "members.tags", label: "Alterar tags", parent: "members.manage" },
     { key: "events.manage", label: "Gerenciar eventos", parent: null },
     { key: "events.create", label: "Criar eventos", parent: "events.manage" },
