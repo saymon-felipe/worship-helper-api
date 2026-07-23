@@ -10,6 +10,7 @@ const schemas = require("../validations/usuarioSchemas");
 const { requireAppAdministrator } = require("../functions/authClaims");
 const _pushNotificationService = require("../services/pushNotificationService");
 const _emailService = require("../services/emailService");
+const _webAuthnService = require("../services/webAuthnService");
 router.get("/return_user", login, (req, res, next) => {
     _usuarioService.returnUser(req.usuario.id_usuario).then((results) => {
         let response = functions.createResponse("Retorno do usuário " + results.id_usuario, results, "GET", 200);
@@ -55,7 +56,9 @@ router.post("/login", validateBody(schemas.login), (req, res, next) => {
         let response = functions.createResponse("Autenticado com sucesso", results, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        return res.status(500).send(error);
+        const message = error instanceof Error ? error.message : String(error);
+        const isAuthenticationFailure = message.toLowerCase().includes("falha na autentica");
+        return res.status(isAuthenticationFailure ? 401 : 500).send(message);
     })
 })
 router.post("/esqueci-senha", validateBody(schemas.requestPasswordReset), async (req, res) => {
@@ -87,6 +90,39 @@ router.post("/redefinir-senha", validateBody(schemas.resetPassword), async (req,
         return res.status(200).send(response);
     } catch (error) {
         return res.status(400).send({ error: error.message || "Não foi possível redefinir a senha." });
+    }
+});
+router.post("/biometria/registro/opcoes", login, async (req, res) => {
+    try {
+        const options = await _webAuthnService.registrationOptions(req.usuario.id_usuario);
+        return res.status(200).send(functions.createResponse("Opções de biometria geradas", options, "POST", 200));
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Não foi possível iniciar a biometria." });
+    }
+});
+router.post("/biometria/registro/verificar", login, validateBody(schemas.biometricCredential), async (req, res) => {
+    try {
+        await _webAuthnService.verifyRegistration(req.usuario.id_usuario, req.body.credential);
+        return res.status(200).send(functions.createResponse("Biometria ativada neste dispositivo", null, "POST", 200));
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Não foi possível ativar a biometria." });
+    }
+});
+router.post("/biometria/login/opcoes", validateBody(schemas.biometricEmail), async (req, res) => {
+    try {
+        const options = await _webAuthnService.authenticationOptions(req.body.email_usuario);
+        return res.status(200).send(functions.createResponse("Opções de biometria geradas", options, "POST", 200));
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Biometria não disponível." });
+    }
+});
+router.post("/biometria/login/verificar", validateBody(schemas.biometricAuthentication), async (req, res) => {
+    try {
+        const userId = await _webAuthnService.verifyAuthentication(req.body.email_usuario, req.body.credential);
+        const token = await _usuarioService.issueTokenForUser(userId);
+        return res.status(200).send(functions.createResponse("Autenticado com biometria", token, "POST", 200));
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Não foi possível validar a biometria." });
     }
 });
 router.post("/rejeita-convite", login, validateBody(schemas.churchId), (req, res, next) => {

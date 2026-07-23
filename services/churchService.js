@@ -43,17 +43,13 @@ let churchService = {
                     }
                 })
 
-                for (let i = 0; i < lista_igrejas.length; i++) {
-                    functions.returnChurchMembers(lista_igrejas[i].id_igreja, true).then((results2) => {
-                        lista_igrejas[i].quantidade_membros = results2.size;
-
-                        if (i == lista_igrejas.length - 1) {
-                            resolve(lista_igrejas);
-                        }
-                    }).catch((error2) => {
-                        reject(error2);
-                    })
-                }
+                Promise.all(lista_igrejas.map(async (igreja) => {
+                    const members = await functions.returnChurchMembers(igreja.id_igreja, true);
+                    igreja.quantidade_membros = members.size;
+                    return igreja;
+                }))
+                .then(resolve)
+                .catch(reject);
             }).catch((error) => {
                 reject(error);
             })

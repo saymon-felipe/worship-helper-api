@@ -21,6 +21,16 @@ module.exports = {
         token: Joi.string().trim().length(64).required(),
         senha_usuario: Joi.string().min(6).max(500).required()
     }),
+    biometricEmail: Joi.object({
+        email_usuario: Joi.string().trim().email().max(100).required()
+    }),
+    biometricCredential: Joi.object({
+        credential: Joi.object().unknown(true).required()
+    }),
+    biometricAuthentication: Joi.object({
+        email_usuario: Joi.string().trim().email().max(100).required(),
+        credential: Joi.object().unknown(true).required()
+    }),
     churchId: Joi.object({
         id_igreja: id
     }),

@@ -36,9 +36,25 @@ let functions = {
             let result = {};
             let self = this;
 
+            if (only_size) {
+                self.executeSQL(`
+                    SELECT COUNT(*) AS quantidade_membros
+                    FROM membros_igreja
+                    WHERE id_igreja = ?
+                `, [id_igreja])
+                .then((results) => {
+                    resolve({
+                        object: [],
+                        size: Number(results[0]?.quantidade_membros || 0)
+                    });
+                })
+                .catch(reject);
+                return;
+            }
+
             self.executeSQL(`
                 SELECT
-                    ${only_size ? 'count(u.id_usuario)' : "*"}
+                    *
                 FROM 
                     usuario u
                 LEFT JOIN

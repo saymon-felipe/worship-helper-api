@@ -85,6 +85,7 @@ let usuarioService = {
                     igreja.nome_igreja,
                     igreja.imagem_igreja,
                     igreja.usuario_administrador,
+                    COUNT(membros_totais.id_usuario) AS quantidade_membros,
                     CASE WHEN 
                         ? = igreja.usuario_administrador THEN true
                     ELSE
@@ -93,11 +94,20 @@ let usuarioService = {
                 FROM 
                     igreja
                 INNER JOIN
-                    membros_igreja
+                    membros_igreja membros_usuario
+                LEFT JOIN
+                    membros_igreja membros_totais
+                ON
+                    membros_totais.id_igreja = igreja.id_igreja
                 WHERE
-                    igreja.id_igreja = membros_igreja.id_igreja 
+                    igreja.id_igreja = membros_usuario.id_igreja 
                 AND
-                    membros_igreja.id_usuario = ?
+                    membros_usuario.id_usuario = ?
+                GROUP BY
+                    igreja.id_igreja,
+                    igreja.nome_igreja,
+                    igreja.imagem_igreja,
+                    igreja.usuario_administrador
             `, 
             [user_id, user_id])
             .then((results) => {
@@ -108,28 +118,12 @@ let usuarioService = {
                         nome_igreja: igreja.nome_igreja,
                         imagem_igreja: igreja.imagem_igreja,
                         membros: [],
-                        quantidade_membros: 0,
+                        quantidade_membros: Number(igreja.quantidade_membros || 0),
                         administrador: igreja.administrador
                     }
                 })
 
-                if (lista_igrejas.length == 0) {
-                    resolve(lista_igrejas);
-                }
-
-                for (let i = 0; i < lista_igrejas.length; i++) {
-                    functions.returnChurchMembers(lista_igrejas[i].id_igreja).then((results2) => {
-                        lista_igrejas[i].membros = results2.object;
-                        lista_igrejas[i].quantidade_membros = results2.size;
-
-                        if (i == lista_igrejas.length - 1) {
-                            resolve(lista_igrejas);
-                        }
-                    })
-                    .catch((error2) => {
-                        reject(error2);
-                    })
-                }
+                resolve(lista_igrejas);
             })
             .catch((error) => {
                 reject(error);
@@ -532,6 +526,13 @@ let usuarioService = {
                 reject(error);
             })
         })
+    },
+    issueTokenForUser: async function (user_id) {
+        const users = await functions.executeSQL("SELECT * FROM usuario WHERE id_usuario = ?", [user_id]);
+        if (users.length <= 0) {
+            throw new Error("Usuário não encontrado");
+        }
+        return createUserToken(users[0]);
     },
     refreshJwt: function (user_id) {
         return new Promise((resolve, reject) => {
