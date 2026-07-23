@@ -1,6 +1,7 @@
 const functions = require("../functions/functions.js");
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const _churchService = require("./churchService.js");
 const uploadConfig = require("../config/upload.js");
 
@@ -221,6 +222,67 @@ let usuarioService = {
                 reject(error);
             })
         })
+    },
+    createPasswordResetToken: async function (user_email) {
+        const normalizedEmail = String(user_email || "").trim().toLowerCase();
+        const users = await functions.executeSQL(`
+            SELECT id_usuario, nome_usuario, email_usuario
+            FROM usuario
+            WHERE LOWER(email_usuario) = ?
+            LIMIT 1
+        `, [normalizedEmail]);
+
+        if (users.length <= 0) {
+            return null;
+        }
+
+        const user = users[0];
+        const token = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+        await functions.executeSQL("DELETE FROM password_reset_tokens WHERE id_usuario = ?", [user.id_usuario]);
+        await functions.executeSQL(`
+            INSERT INTO password_reset_tokens (id_usuario, token_hash, expires_at)
+            VALUES (?, ?, DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE))
+        `, [user.id_usuario, tokenHash]);
+
+        return {
+            email_usuario: user.email_usuario,
+            nome_usuario: user.nome_usuario,
+            token
+        };
+    },
+    resetPassword: async function (user_email, token, new_password) {
+        const normalizedEmail = String(user_email || "").trim().toLowerCase();
+        const tokenHash = crypto.createHash("sha256").update(String(token || "")).digest("hex");
+        const tokens = await functions.executeSQL(`
+            SELECT prt.id, prt.id_usuario
+            FROM password_reset_tokens prt
+            INNER JOIN usuario u ON u.id_usuario = prt.id_usuario
+            WHERE prt.token_hash = ?
+              AND LOWER(u.email_usuario) = ?
+              AND prt.used_at IS NULL
+              AND prt.expires_at > CURRENT_TIMESTAMP()
+            LIMIT 1
+        `, [tokenHash, normalizedEmail]);
+
+        if (tokens.length <= 0) {
+            throw new Error("Este link é inválido ou expirou. Solicite uma nova redefinição de senha.");
+        }
+
+        const resetToken = tokens[0];
+        const consumeResult = await functions.executeSQL(`
+            UPDATE password_reset_tokens
+            SET used_at = CURRENT_TIMESTAMP()
+            WHERE id = ? AND used_at IS NULL
+        `, [resetToken.id]);
+
+        if (consumeResult.affectedRows <= 0) {
+            throw new Error("Este link já foi utilizado. Solicite uma nova redefinição de senha.");
+        }
+
+        const passwordHash = await bcrypt.hash(String(new_password), 10);
+        await functions.executeSQL("UPDATE usuario SET senha_usuario = ? WHERE id_usuario = ?", [passwordHash, resetToken.id_usuario]);
     },
     rejectInvite: function (company_id, user_id) {
         return new Promise((resolve, reject) => {

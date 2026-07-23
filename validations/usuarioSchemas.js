@@ -13,6 +13,14 @@ module.exports = {
         email_usuario: Joi.string().trim().email().max(100).required(),
         senha_usuario: Joi.string().max(500).required()
     }),
+    requestPasswordReset: Joi.object({
+        email_usuario: Joi.string().trim().email().max(100).required()
+    }),
+    resetPassword: Joi.object({
+        email_usuario: Joi.string().trim().email().max(100).required(),
+        token: Joi.string().trim().length(64).required(),
+        senha_usuario: Joi.string().min(6).max(500).required()
+    }),
     churchId: Joi.object({
         id_igreja: id
     }),

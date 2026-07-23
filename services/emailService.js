@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 const createInviteHtml = require("../templates/invite");
 const createExistingUserInviteHtml = require("../templates/inviteExistingUser");
+const createPasswordResetHtml = require("../templates/passwordReset");
 
 function getMailUser() {
     return process.env.USER_EMAIL || process.env.EMAIL_USER || process.env.MAIL_USER || process.env.SMTP_USER || "";
@@ -83,6 +84,25 @@ async function sendChurchInvite({ to, churchName, inviterName, existingUser = fa
     }
 }
 
+async function sendPasswordReset({ to, userName, token }) {
+    const transportConfig = getTransportConfig();
+    if (!transportConfig) {
+        throw new Error("Configuração de e-mail não encontrada");
+    }
+
+    const resetUrl = `${getAppUrl()}/reset-password?email=${encodeURIComponent(to)}&token=${encodeURIComponent(token)}`;
+    const transporter = nodemailer.createTransport(transportConfig);
+
+    await transporter.sendMail({
+        from: `"Worship Helper" <${getMailUser().trim()}>`,
+        to,
+        subject: "Redefinição de senha - Worship Helper",
+        html: createPasswordResetHtml({ userName, resetUrl, apiUrl: getApiUrl() }),
+        text: `Use este link para redefinir sua senha no Worship Helper. Ele expira em 15 minutos: ${resetUrl}`
+    });
+}
+
 module.exports = {
-    sendChurchInvite
+    sendChurchInvite,
+    sendPasswordReset
 };

@@ -9,6 +9,7 @@ const { validateBody } = require("../middleware/validate");
 const schemas = require("../validations/usuarioSchemas");
 const { requireAppAdministrator } = require("../functions/authClaims");
 const _pushNotificationService = require("../services/pushNotificationService");
+const _emailService = require("../services/emailService");
 router.get("/return_user", login, (req, res, next) => {
     _usuarioService.returnUser(req.usuario.id_usuario).then((results) => {
         let response = functions.createResponse("Retorno do usuário " + results.id_usuario, results, "GET", 200);
@@ -57,6 +58,37 @@ router.post("/login", validateBody(schemas.login), (req, res, next) => {
         return res.status(500).send(error);
     })
 })
+router.post("/esqueci-senha", validateBody(schemas.requestPasswordReset), async (req, res) => {
+    try {
+        const resetRequest = await _usuarioService.createPasswordResetToken(req.body.email_usuario);
+        if (resetRequest) {
+            await _emailService.sendPasswordReset({
+                to: resetRequest.email_usuario,
+                userName: resetRequest.nome_usuario,
+                token: resetRequest.token
+            });
+        }
+
+        const response = functions.createResponse(
+            "Se houver uma conta com este e-mail, enviaremos um link para redefinir sua senha.",
+            null,
+            "POST",
+            200
+        );
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(500).send({ error: "Não foi possível enviar o e-mail de redefinição. Tente novamente." });
+    }
+});
+router.post("/redefinir-senha", validateBody(schemas.resetPassword), async (req, res) => {
+    try {
+        await _usuarioService.resetPassword(req.body.email_usuario, req.body.token, req.body.senha_usuario);
+        const response = functions.createResponse("Senha redefinida com sucesso. Faça login com sua nova senha.", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Não foi possível redefinir a senha." });
+    }
+});
 router.post("/rejeita-convite", login, validateBody(schemas.churchId), (req, res, next) => {
     _usuarioService.rejectInvite(req.body.id_igreja, req.usuario.id_usuario).then(() => {
         let response = functions.createResponse("Convite excluído com sucesso", null, "POST", 200);
