@@ -75,8 +75,8 @@ router.post("/criar-tag", login, validateBody(schemas.tag), (req, res, next) => 
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createTag(req.body.id_igreja, req.body.nome).then(() => {
-            let response = functions.createResponse("Tag criada com sucesso", null, "POST", 200);
+        _churchService.createTag(req.body.id_igreja, req.body.nome).then((tag) => {
+            let response = functions.createResponse("Tag criada com sucesso", tag, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -126,8 +126,8 @@ router.post("/criar-funcao", login, validateBody(schemas.churchFunction), (req, 
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createFunction(req.body.id_igreja, req.body.nome, req.body.permissoes).then(() => {
-            let response = functions.createResponse("Função criada com sucesso", null, "POST", 200);
+        _churchService.createFunction(req.body.id_igreja, req.body.nome, req.body.permissoes).then((churchFunction) => {
+            let response = functions.createResponse("Função criada com sucesso", churchFunction, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -143,8 +143,8 @@ router.post("/atualizar-funcao", login, validateBody(schemas.updateChurchFunctio
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.updateFunction(req.body.id_function, req.body.id_igreja, req.body.nome, req.body.permissoes).then(() => {
-            let response = functions.createResponse("Funcao atualizada com sucesso", null, "POST", 200);
+        _churchService.updateFunction(req.body.id_function, req.body.id_igreja, req.body.nome, req.body.permissoes).then((churchFunction) => {
+            let response = functions.createResponse("Funcao atualizada com sucesso", churchFunction, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -228,7 +228,7 @@ router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, 
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario, req.body.parent_id).then(() => {
+        _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario, req.body.parent_id).then((warning) => {
             if (!req.body.parent_id) {
                 _pushNotificationService.notifyChurchWarning({
                     churchId: req.body.id_igreja,
@@ -237,7 +237,7 @@ router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, 
                 }).catch((error) => console.error("[Push] Falha ao notificar aviso:", error.message));
             }
 
-            let response = functions.createResponse("Aviso criado com sucesso", null, "POST", 200);
+            let response = functions.createResponse("Aviso criado com sucesso", warning, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -361,8 +361,8 @@ router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res
             return res.status(401).send("Acesso negado");
         }
         
-        _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario, req.body.email_usuario).then(() => {
-            let response = functions.createResponse("Convite enviado", null, "POST", 200);
+        _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario, req.body.email_usuario).then((invite) => {
+            let response = functions.createResponse("Convite enviado", invite, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -501,7 +501,7 @@ router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req,
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then((event) => {
+        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(async (event) => {
             _pushNotificationService.notifyEventCreated({
                 eventId: event.id_evento,
                 churchId: req.body.id_igreja,
@@ -509,7 +509,8 @@ router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req,
                 eventName: req.body.event_name
             }).catch((error) => console.error("[Push] Falha ao notificar evento:", error.message));
 
-            let response = functions.createResponse("Evento cadastrado com sucesso", null, "POST", 200);
+            const createdEvent = await _churchService.returnEvent(event.id_evento, req.body.id_igreja);
+            let response = functions.createResponse("Evento cadastrado com sucesso", createdEvent, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -529,8 +530,9 @@ router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventP
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.updateEvent(req.params.id_evento, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(() => {
-            let response = functions.createResponse("Evento atualizado com sucesso", null, "POST", 200);
+        _churchService.updateEvent(req.params.id_evento, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(async () => {
+            const updatedEvent = await _churchService.returnEvent(req.params.id_evento, req.body.id_igreja);
+            let response = functions.createResponse("Evento atualizado com sucesso", updatedEvent, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(500).send(error);
@@ -569,14 +571,14 @@ router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComme
                     return res.status(401).send("Apenas participantes do evento podem comentar");
                 }
 
-                _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id).then(() => {
+                _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id).then((comment) => {
                     _pushNotificationService.notifyEventComment({
                         eventId: req.body.id_evento,
                         actorId: req.usuario.id_usuario,
                         message: req.body.mensagem
                     }).catch((error) => console.error("[Push] Falha ao notificar comentario do evento:", error.message));
 
-                    let response = functions.createResponse("Comentario criado com sucesso", null, "POST", 200);
+                    let response = functions.createResponse("Comentario criado com sucesso", comment, "POST", 200);
                     return res.status(200).send(response);
                 }).catch((error) => {
                     return res.status(500).send(error);
@@ -760,11 +762,17 @@ router.post("/eventos/membros/anotacoes/criar", login, validateBody(schemas.crea
             return res.status(401).send("Apenas participantes do evento podem criar anotações");
         }
 
-        await functions.executeSQL(
+        const result = await functions.executeSQL(
             `INSERT INTO anotacoes_membros_eventos (id_evento, id_usuario_membro, id_usuario_criador, mensagem) VALUES (?, ?, ?, ?)`,
             [req.body.id_evento, req.body.id_usuario_membro, req.usuario.id_usuario, req.body.mensagem]
         );
-        let response = functions.createResponse("Anotação criada com sucesso", null, "POST", 200);
+        const note = await functions.executeSQL(`
+            SELECT n.id, n.id_evento, n.id_usuario_membro, n.id_usuario_criador, n.mensagem, n.data_criacao, u.nome_usuario, u.imagem_usuario
+            FROM anotacoes_membros_eventos n
+            INNER JOIN usuario u ON u.id_usuario = n.id_usuario_criador
+            WHERE n.id = ?
+        `, [result.insertId]);
+        let response = functions.createResponse("Anotação criada com sucesso", note[0], "POST", 200);
         return res.status(200).send(response);
     } catch (error) {
         return res.status(401).send(error);

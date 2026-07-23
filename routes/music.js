@@ -104,8 +104,9 @@ router.post("/", login, validateBody(schemas.create), async (req, res, next) => 
         return;
     }
 
-    _musicService.createMusic(req.body.id_igreja, req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(() => {
-        let response = functions.createResponse("Musica cadastrada com sucesso no banco de dados", null, "POST", 200);
+    _musicService.createMusic(req.body.id_igreja, req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(async (music) => {
+        const createdMusic = await _musicService.returnMusic(music.id_musica, req.body.id_igreja);
+        let response = functions.createResponse("Musica cadastrada com sucesso no banco de dados", createdMusic, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(error.status || 500).send(error.message || error);
@@ -146,8 +147,8 @@ router.post("/comentarios/criar", login, validateBody(schemas.createComment), as
         return;
     }
 
-    _musicService.postMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.parent_id).then(() => {
-        let response = functions.createResponse("Comentario criado com sucesso", null, "POST", 200);
+    _musicService.postMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.parent_id).then((comment) => {
+        let response = functions.createResponse("Comentario criado com sucesso", comment, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
         return res.status(500).send(error);
@@ -194,14 +195,14 @@ router.post("/comentarios-evento/criar", login, validateBody(schemas.createEvent
             return res.status(401).send("Apenas participantes do evento podem comentar");
         }
 
-        await _musicService.postEventMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.id_evento, req.body.parent_id);
+        const comment = await _musicService.postEventMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.id_evento, req.body.parent_id);
         _pushNotificationService.notifyEventMusicComment({
             eventId: req.body.id_evento,
             musicId: req.body.id_musica,
             actorId: req.usuario.id_usuario,
             message: req.body.mensagem
         }).catch((error) => console.error("[Push] Falha ao notificar comentario da musica no evento:", error.message));
-        let response = functions.createResponse("Comentário da música no evento criado com sucesso", null, "POST", 200);
+        let response = functions.createResponse("Comentário da música no evento criado com sucesso", comment, "POST", 200);
         return res.status(200).send(response);
     } catch (error) {
         return res.status(500).send(error);

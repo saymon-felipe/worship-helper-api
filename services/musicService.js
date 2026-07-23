@@ -235,6 +235,7 @@ let musicService = {
         );
 
         await this.insertMusicTags(inserted.insertId, music_tags);
+        return { id_musica: inserted.insertId };
     },
     returnMusics: function (church_id) {
         return new Promise((resolve, reject) => {
@@ -520,6 +521,8 @@ let musicService = {
         if (result.affectedRows <= 0) {
             throw "Nao foi possivel publicar o comentario";
         }
+
+        return { id_aviso: result.insertId };
     },
     likeEventMusicComment: async function (id_comment, user_id) {
         const likes = await functions.executeSQL(`
@@ -625,7 +628,7 @@ let musicService = {
                     reject(new Error("Música não encontrada"));
                     return;
                 }
-                resolve();
+                resolve({ id_aviso: results.insertId });
             }).catch((error) => {
                 reject(error);
             });

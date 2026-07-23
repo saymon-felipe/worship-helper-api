@@ -69,8 +69,8 @@ let churchService = {
                     (?, ?, "membros")
             `,
             [company_id, new_tag])
-            .then(() => {
-                resolve();
+            .then((results) => {
+                resolve({ id_tag: results.insertId, nome_tag: new_tag, tipo_tag: "membros" });
             })
             .catch((error) => {
                 reject(error);
@@ -121,8 +121,13 @@ let churchService = {
                 VALUES
                     (?, ?, "membros", ?)
             `, [company_id, new_function, JSON.stringify(Array.isArray(permissions) ? permissions : [])])
-            .then(() => {
-                resolve();
+            .then((results) => {
+                resolve({
+                    id_funcao: results.insertId,
+                    nome_funcao: new_function,
+                    tipo_funcao: "membros",
+                    permissoes: Array.isArray(permissions) ? permissions : []
+                });
             })
             .catch((error) => {
                 reject(error);
@@ -168,7 +173,11 @@ let churchService = {
                         return;
                     }
 
-                    resolve();
+                    resolve({
+                        id_funcao: function_id,
+                        nome_funcao: new_function,
+                        permissoes: Array.isArray(permissions) ? permissions : []
+                    });
                 })
                 .catch((error) => {
                     reject(error);
@@ -534,6 +543,8 @@ let churchService = {
             throw "Ocorreu um erro ao enviar o convite";
         }
 
+        const invite = { id: results.insertId, id_usuario: requestedUserId, email_usuario: normalizedEmail };
+
         // Fetch church name and inviter name to send the email
         try {
             const [churchInfo, inviterInfo] = await Promise.all([
@@ -568,6 +579,8 @@ let churchService = {
             console.error("[CHURCH_SERVICE] Falha ao disparar email de convite:", emailErr);
             // We do not throw the error here so that the database entry remains valid
         }
+
+        return invite;
     },
     returnPendingInvites: async function (company_id) {
         const results = await functions.executeSQL(
@@ -865,6 +878,8 @@ let churchService = {
         if (result.affectedRows <= 0) {
             throw "Nao foi possivel publicar o comentario";
         }
+
+        return { id_aviso: result.insertId };
     },
     returnEventComments: async function (event_id, user_id) {
         const results = await functions.executeSQL(`
