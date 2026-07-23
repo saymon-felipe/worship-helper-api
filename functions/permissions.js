@@ -113,6 +113,16 @@ let permissions = {
 
         return results[0].id_criador == user_id || results[0].participante == user_id;
     },
+    isEventParticipant: async function (event_id, user_id) {
+        const results = await functions.executeSQL(`
+            SELECT id
+            FROM membros_eventos
+            WHERE id_evento = ? AND id_usuario = ?
+            LIMIT 1
+        `, [event_id, user_id]);
+
+        return results.length > 0;
+    },
     canEditEvent: async function (event_id, id_igreja, user_id) {
         const permission = await this.checkPermission(user_id, id_igreja);
         if (this.hasPermission(permission, "events.edit")) {

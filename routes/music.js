@@ -189,9 +189,9 @@ router.post("/comentarios-evento/criar", login, validateBody(schemas.createEvent
             return res.status(404).send("Música não encontrada neste evento");
         }
 
-        const canComment = await _permissions.isEventParticipantOrCreator(req.body.id_evento, req.usuario.id_usuario);
+        const canComment = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
         if (!canComment) {
-            return res.status(401).send("Apenas o criador e participantes do evento podem comentar");
+            return res.status(401).send("Apenas participantes do evento podem comentar");
         }
 
         await _musicService.postEventMusicComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_musica, req.body.id_evento, req.body.parent_id);
@@ -234,6 +234,11 @@ router.post("/comentarios-evento/like", login, validateBody(schemas.likeEventMus
             return res.status(404).send("Música não encontrada neste evento");
         }
 
+        const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem curtir comentários");
+        }
+
         await _musicService.likeEventMusicComment(req.body.id_aviso, req.usuario.id_usuario);
         let response = functions.createResponse("Curtida no comentário da música no evento feita com sucesso", null, "POST", 200);
         return res.status(200).send(response);
@@ -251,6 +256,11 @@ router.post("/comentarios-evento/editar", login, validateBody(schemas.updateEven
             return res.status(404).send("Música não encontrada neste evento");
         }
 
+        const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem editar comentários");
+        }
+
         await _musicService.updateEventMusicComment(req.body.id_comentario, req.usuario.id_usuario, req.body.mensagem);
         let response = functions.createResponse("Comentário da música no evento atualizado com sucesso", null, "POST", 200);
         return res.status(200).send(response);
@@ -266,6 +276,11 @@ router.post("/comentarios-evento/deletar", login, validateBody(schemas.deleteEve
         const eventHasMusic = await _musicService.eventHasMusic(req.body.id_evento, req.body.id_musica, req.body.id_igreja);
         if (!eventHasMusic) {
             return res.status(404).send("Música não encontrada neste evento");
+        }
+
+        const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem excluir comentários");
         }
 
         await _musicService.deleteEventMusicComment(req.body.id_comentario, req.usuario.id_usuario);

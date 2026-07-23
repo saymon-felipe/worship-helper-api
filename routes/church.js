@@ -10,6 +10,26 @@ const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/churchSchemas");
 const { requireAppAdministrator } = require("../functions/authClaims");
 
+function isPastEventDate(eventDate) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(eventDate || ""));
+    if (!match) {
+        return true;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    const selectedDate = new Date(year, month, day);
+    const isValidDate = selectedDate.getFullYear() === year && selectedDate.getMonth() === month && selectedDate.getDate() === day;
+    if (!isValidDate) {
+        return true;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return selectedDate < today;
+}
+
 router.get("/listar-igrejas", login, (req, res, next) => {
     if (!requireAppAdministrator(req, res)) {
         return;
@@ -472,6 +492,10 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
 });
 
 router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req, res, next) => {
+    if (isPastEventDate(req.body.event_date)) {
+        return res.status(422).send("A data do evento não pode ser anterior a hoje");
+    }
+
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!_permissions.hasPermission(permission, "events.create")) {
             return res.status(401).send("Acesso negado");
@@ -496,6 +520,10 @@ router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req,
 })
 
 router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.createEvent), (req, res, next) => {
+    if (isPastEventDate(req.body.event_date)) {
+        return res.status(422).send("A data do evento não pode ser anterior a hoje");
+    }
+
     _permissions.canEditEvent(req.params.id_evento, req.body.id_igreja, req.usuario.id_usuario).then((canEdit) => {
         if (!canEdit) {
             return res.status(401).send("Acesso negado");
@@ -536,9 +564,9 @@ router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComme
                 return res.status(404).send("Evento nao encontrado");
             }
 
-            _permissions.isEventParticipantOrCreator(req.body.id_evento, req.usuario.id_usuario).then((canComment) => {
+            _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario).then((canComment) => {
                 if (!canComment) {
-                    return res.status(401).send("Apenas o criador e participantes do evento podem comentar");
+                    return res.status(401).send("Apenas participantes do evento podem comentar");
                 }
 
                 _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id).then(() => {
@@ -585,70 +613,99 @@ router.post("/eventos/comentarios/retorna", login, validateBody(schemas.eventCom
     })
 })
 
-router.post("/eventos/comentarios/like", login, validateBody(schemas.likeEventComment), (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
-        _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja).then((belongsToChurch) => {
-            if (!belongsToChurch) {
-                return res.status(404).send("Evento nao encontrado");
-            }
+router.post("/eventos/comentarios/like", login, validateBody(schemas.likeEventComment), async (req, res) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+        const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
+        if (!belongsToChurch) {
+            return res.status(404).send("Evento nao encontrado");
+        }
 
-            _churchService.likeEventComment(req.body.id_aviso, req.usuario.id_usuario).then(() => {
-                let response = functions.createResponse("Curtida no comentario do evento feita com sucesso", null, "POST", 200);
-                return res.status(200).send(response);
-            }).catch((error) => {
-                return res.status(500).send(error);
-            })
-        }).catch((error) => {
-            return res.status(401).send(error);
-        })
-    }).catch((error) => {
+        const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem curtir comentários");
+        }
+
+        await _churchService.likeEventComment(req.body.id_aviso, req.usuario.id_usuario);
+        let response = functions.createResponse("Curtida no comentario do evento feita com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
         return res.status(401).send(error);
-    })
+    }
 })
 
-router.post("/eventos/comentarios/editar", login, validateBody(schemas.updateEventComment), (req, res, next) => {
-    functions.executeSQL(`SELECT id_usuario FROM comentarios_eventos WHERE id = ?`, [req.body.id_comentario])
-    .then((results) => {
-        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
-        if (!isOwner) {
-            return res.status(401).send("Acesso negado");
+router.post("/eventos/comentarios/editar", login, validateBody(schemas.updateEventComment), async (req, res) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
+        if (!belongsToChurch) {
+            return res.status(404).send("Evento nao encontrado");
         }
 
-        functions.executeSQL(`UPDATE comentarios_eventos SET mensagem = ? WHERE id = ?`, [req.body.mensagem, req.body.id_comentario])
-        .then(() => {
-            let response = functions.createResponse("Comentário do evento atualizado com sucesso", null, "POST", 200);
-            return res.status(200).send(response);
-        }).catch((error) => {
-            return res.status(500).send(error);
-        });
-    }).catch((error) => {
-        return res.status(500).send(error);
-    });
+        const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem editar comentários");
+        }
+
+        const results = await functions.executeSQL(
+            `SELECT id FROM comentarios_eventos WHERE id = ? AND id_evento = ?`,
+            [req.body.id_comentario, req.body.id_evento]
+        );
+        if (results.length <= 0) {
+            return res.status(404).send("Comentário não encontrado neste evento");
+        }
+
+        await functions.executeSQL(
+            `UPDATE comentarios_eventos SET mensagem = ? WHERE id = ? AND id_evento = ?`,
+            [req.body.mensagem, req.body.id_comentario, req.body.id_evento]
+        );
+        let response = functions.createResponse("Comentário do evento atualizado com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(401).send(error);
+    }
 })
 
-router.post("/eventos/comentarios/deletar", login, validateBody(schemas.deleteEventComment), (req, res, next) => {
-    functions.executeSQL(`SELECT id_usuario FROM comentarios_eventos WHERE id = ?`, [req.body.id_comentario])
-    .then((results) => {
-        const isOwner = results.length > 0 && Number(results[0].id_usuario) === Number(req.usuario.id_usuario);
-        if (!isOwner) {
-            return res.status(401).send("Acesso negado");
+router.post("/eventos/comentarios/deletar", login, validateBody(schemas.deleteEventComment), async (req, res) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
+        if (!belongsToChurch) {
+            return res.status(404).send("Evento nao encontrado");
         }
 
-        functions.executeSQL(`DELETE FROM curtidas_comentarios_eventos WHERE id_comentario = ?`, [req.body.id_comentario])
-        .then(() => {
-            functions.executeSQL(`DELETE FROM comentarios_eventos WHERE id = ? OR parent_id = ?`, [req.body.id_comentario, req.body.id_comentario])
-            .then(() => {
-                let response = functions.createResponse("Comentário do evento removido com sucesso", null, "POST", 200);
-                return res.status(200).send(response);
-            }).catch((error) => {
-                return res.status(500).send(error);
-            });
-        }).catch((error) => {
-            return res.status(500).send(error);
-        });
-    }).catch((error) => {
-        return res.status(500).send(error);
-    });
+        const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem excluir comentários");
+        }
+
+        const results = await functions.executeSQL(
+            `SELECT id FROM comentarios_eventos WHERE id = ? AND id_evento = ?`,
+            [req.body.id_comentario, req.body.id_evento]
+        );
+        if (results.length <= 0) {
+            return res.status(404).send("Comentário não encontrado neste evento");
+        }
+
+        await functions.executeSQL(
+            `DELETE FROM curtidas_comentarios_eventos
+             WHERE id_comentario IN (
+                SELECT id FROM comentarios_eventos
+                WHERE (id = ? OR parent_id = ?) AND id_evento = ?
+             )`,
+            [req.body.id_comentario, req.body.id_comentario, req.body.id_evento]
+        );
+        await functions.executeSQL(
+            `DELETE FROM comentarios_eventos WHERE (id = ? OR parent_id = ?) AND id_evento = ?`,
+            [req.body.id_comentario, req.body.id_comentario, req.body.id_evento]
+        );
+        let response = functions.createResponse("Comentário do evento removido com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(401).send(error);
+    }
 })
 
 router.post("/retorna-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.churchId), (req, res, next) => {
@@ -689,24 +746,29 @@ router.post("/tons_de_musica/:id_musica", login, validateParams(schemas.musicPar
     })
 })
 
-router.post("/eventos/membros/anotacoes/criar", login, validateBody(schemas.createMemberNote), (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador && !permission.apenas_membro) {
-            return res.status(401).send("Acesso negado");
+router.post("/eventos/membros/anotacoes/criar", login, validateBody(schemas.createMemberNote), async (req, res) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+
+        const eventBelongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
+        const authorIsParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        const memberIsParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.body.id_usuario_membro);
+        if (!eventBelongsToChurch || !memberIsParticipant) {
+            return res.status(404).send("Participante não encontrado neste evento");
+        }
+        if (!authorIsParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem criar anotações");
         }
 
-        functions.executeSQL(
+        await functions.executeSQL(
             `INSERT INTO anotacoes_membros_eventos (id_evento, id_usuario_membro, id_usuario_criador, mensagem) VALUES (?, ?, ?, ?)`,
             [req.body.id_evento, req.body.id_usuario_membro, req.usuario.id_usuario, req.body.mensagem]
-        ).then(() => {
-            let response = functions.createResponse("Anotação criada com sucesso", null, "POST", 200);
-            return res.status(200).send(response);
-        }).catch((error) => {
-            return res.status(500).send(error);
-        });
-    }).catch((error) => {
+        );
+        let response = functions.createResponse("Anotação criada com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
         return res.status(401).send(error);
-    });
+    }
 });
 
 router.post("/eventos/membros/anotacoes/retorna", login, validateBody(schemas.getMemberNotes), (req, res, next) => {
@@ -749,64 +811,60 @@ router.post("/eventos/membros/anotacoes/retorna", login, validateBody(schemas.ge
     });
 });
 
-router.post("/eventos/membros/anotacoes/editar", login, validateBody(schemas.updateMemberNote), (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador && !permission.apenas_membro) {
-            return res.status(401).send("Acesso negado");
+router.post("/eventos/membros/anotacoes/editar", login, validateBody(schemas.updateMemberNote), async (req, res) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+        const results = await functions.executeSQL(`
+            SELECT n.id_evento, n.id_usuario_criador
+            FROM anotacoes_membros_eventos n
+            INNER JOIN eventos e ON e.id = n.id_evento
+            WHERE n.id = ? AND e.id_igreja = ?
+        `, [req.body.id_nota, req.body.id_igreja]);
+        if (results.length <= 0) {
+            return res.status(404).send("Anotação não encontrada");
         }
 
-        functions.executeSQL(`SELECT id_usuario_criador FROM anotacoes_membros_eventos WHERE id = ?`, [req.body.id_nota])
-        .then((results) => {
-            const isOwner = results.length > 0 && Number(results[0].id_usuario_criador) === Number(req.usuario.id_usuario);
-            if (!isOwner) {
-                return res.status(401).send("Acesso negado");
-            }
+        const note = results[0];
+        const isOwner = Number(note.id_usuario_criador) === Number(req.usuario.id_usuario);
+        const isParticipant = await _permissions.isEventParticipant(note.id_evento, req.usuario.id_usuario);
+        if (!isOwner || !isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem editar a própria anotação");
+        }
 
-            functions.executeSQL(
-                `UPDATE anotacoes_membros_eventos SET mensagem = ? WHERE id = ?`,
-                [req.body.mensagem, req.body.id_nota]
-            ).then(() => {
-                let response = functions.createResponse("Anotação editada com sucesso", null, "POST", 200);
-                return res.status(200).send(response);
-            }).catch((error) => {
-                return res.status(500).send(error);
-            });
-        }).catch((error) => {
-            return res.status(500).send(error);
-        });
-    }).catch((error) => {
+        await functions.executeSQL(`UPDATE anotacoes_membros_eventos SET mensagem = ? WHERE id = ?`, [req.body.mensagem, req.body.id_nota]);
+        let response = functions.createResponse("Anotação editada com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
         return res.status(401).send(error);
-    });
+    }
 });
 
-router.post("/eventos/membros/anotacoes/deletar", login, validateBody(schemas.deleteMemberNote), (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
-        if (!permission.administrador && !permission.apenas_membro) {
-            return res.status(401).send("Acesso negado");
+router.post("/eventos/membros/anotacoes/deletar", login, validateBody(schemas.deleteMemberNote), async (req, res) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+        const results = await functions.executeSQL(`
+            SELECT n.id_evento, n.id_usuario_criador
+            FROM anotacoes_membros_eventos n
+            INNER JOIN eventos e ON e.id = n.id_evento
+            WHERE n.id = ? AND e.id_igreja = ?
+        `, [req.body.id_nota, req.body.id_igreja]);
+        if (results.length <= 0) {
+            return res.status(404).send("Anotação não encontrada");
         }
 
-        functions.executeSQL(`SELECT id_usuario_criador FROM anotacoes_membros_eventos WHERE id = ?`, [req.body.id_nota])
-        .then((results) => {
-            const isOwner = results.length > 0 && Number(results[0].id_usuario_criador) === Number(req.usuario.id_usuario);
-            if (!isOwner) {
-                return res.status(401).send("Acesso negado");
-            }
+        const note = results[0];
+        const isOwner = Number(note.id_usuario_criador) === Number(req.usuario.id_usuario);
+        const isParticipant = await _permissions.isEventParticipant(note.id_evento, req.usuario.id_usuario);
+        if (!isOwner || !isParticipant) {
+            return res.status(401).send("Apenas participantes do evento podem excluir a própria anotação");
+        }
 
-            functions.executeSQL(
-                `DELETE FROM anotacoes_membros_eventos WHERE id = ?`,
-                [req.body.id_nota]
-            ).then(() => {
-                let response = functions.createResponse("Anotação deletada com sucesso", null, "POST", 200);
-                return res.status(200).send(response);
-            }).catch((error) => {
-                return res.status(500).send(error);
-            });
-        }).catch((error) => {
-            return res.status(500).send(error);
-        });
-    }).catch((error) => {
+        await functions.executeSQL(`DELETE FROM anotacoes_membros_eventos WHERE id = ?`, [req.body.id_nota]);
+        let response = functions.createResponse("Anotação deletada com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
         return res.status(401).send(error);
-    });
+    }
 });
 
 module.exports = router;

@@ -384,17 +384,21 @@ let churchService = {
     },
     likeWarning: function (user_id, warning_id) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL(
-                `
-                    INSERT INTO
-                        curtidas_avisos
-                        (id_usuario, id_aviso)
-                    VALUES
-                        (?, ?)
-                `, [user_id, warning_id]
-            ).then((results) => {
+            functions.executeSQL(`
+                SELECT id
+                FROM curtidas_avisos
+                WHERE id_usuario = ? AND id_aviso = ?
+                LIMIT 1
+            `, [user_id, warning_id]).then((likes) => {
+                const query = likes.length > 0
+                    ? `DELETE FROM curtidas_avisos WHERE id_usuario = ? AND id_aviso = ?`
+                    : `INSERT INTO curtidas_avisos (id_usuario, id_aviso) VALUES (?, ?)`;
+
+                return functions.executeSQL(query, [user_id, warning_id]);
+            }).then((results) => {
                 if (results.affectedRows <= 0) {
-                    reject("Ocorreu um erro ao curtir o aviso");
+                    reject("Ocorreu um erro ao atualizar a curtida do aviso");
+                    return;
                 }
 
                 resolve();
@@ -905,19 +909,22 @@ let churchService = {
         }));
     },
     likeEventComment: async function (id_comment, user_id) {
+        const likes = await functions.executeSQL(`
+            SELECT id
+            FROM curtidas_comentarios_eventos
+            WHERE id_usuario = ? AND id_comentario = ?
+            LIMIT 1
+        `, [user_id, id_comment]);
+
         const result = await functions.executeSQL(
-            `
-                INSERT INTO
-                    curtidas_comentarios_eventos
-                    (id_usuario, id_comentario)
-                VALUES
-                    (?, ?)
-            `,
+            likes.length > 0
+                ? `DELETE FROM curtidas_comentarios_eventos WHERE id_usuario = ? AND id_comentario = ?`
+                : `INSERT INTO curtidas_comentarios_eventos (id_usuario, id_comentario) VALUES (?, ?)`,
             [user_id, id_comment]
         );
 
         if (result.affectedRows <= 0) {
-            throw "Ocorreu um erro ao curtir o comentario";
+            throw "Ocorreu um erro ao atualizar a curtida do comentario";
         }
     },
     returnEvents: function (company_id) {
@@ -959,46 +966,38 @@ let churchService = {
                     AND
                         e.data_inicio > DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
                     GROUP BY
-                        id_evento;
+                        id_evento
+                    ORDER BY
+                        e.data_inicio ASC;
                 `, [company_id, company_id]
             ).then((results) => {
                 if (results.length == 0) {
                     resolve([]);
-                }
-                
-                let newEvents = [];
-                let promises = [];
-                
-                for (let i = 0; i < results.length; i++) {
-                    let currentEvent = results[i];
-
-                    promises.push(
-                        functions.executeSQL(
-                            `
-                                SELECT
-                                    u.imagem_usuario,
-                                    u.id_usuario
-                                FROM
-                                    usuario u
-                                INNER JOIN
-                                    membros_eventos me
-                                ON
-                                    me.id_usuario = u.id_usuario
-                                WHERE
-                                    me.id_evento = ?
-                            `, [currentEvent.id_evento]
-                        ).then((results) => {
-                            currentEvent["membros_evento"] = results;
-                            newEvents.push(currentEvent);
-                        })
-                    )
+                    return;
                 }
 
-                Promise.all(promises).then(() => {
-                    resolve(newEvents);
-                }).catch((error) => {
-                    reject(error);
-                })
+                const memberQueries = results.map((currentEvent) =>
+                    functions.executeSQL(
+                        `
+                            SELECT
+                                u.imagem_usuario,
+                                u.id_usuario
+                            FROM
+                                usuario u
+                            INNER JOIN
+                                membros_eventos me
+                            ON
+                                me.id_usuario = u.id_usuario
+                            WHERE
+                                me.id_evento = ?
+                        `, [currentEvent.id_evento]
+                    ).then((members) => ({
+                        ...currentEvent,
+                        membros_evento: members
+                    }))
+                );
+
+                Promise.all(memberQueries).then(resolve).catch(reject);
             })
         })
     },

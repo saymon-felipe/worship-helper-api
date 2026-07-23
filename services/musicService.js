@@ -400,17 +400,21 @@ let musicService = {
     },
     likeComment: function (id_comment, user_id) {
         return new Promise((resolve, reject) => {
-            functions.executeSQL(
-                `
-                    INSERT INTO
-                        curtidas_comentarios_musicas
-                        (id_usuario, id_comentario)
-                    VALUES
-                        (?, ?)
-                `, [user_id, id_comment]
-            ).then((results) => {
+            functions.executeSQL(`
+                SELECT id
+                FROM curtidas_comentarios_musicas
+                WHERE id_usuario = ? AND id_comentario = ?
+                LIMIT 1
+            `, [user_id, id_comment]).then((likes) => {
+                const query = likes.length > 0
+                    ? `DELETE FROM curtidas_comentarios_musicas WHERE id_usuario = ? AND id_comentario = ?`
+                    : `INSERT INTO curtidas_comentarios_musicas (id_usuario, id_comentario) VALUES (?, ?)`;
+
+                return functions.executeSQL(query, [user_id, id_comment]);
+            }).then((results) => {
                 if (results.affectedRows <= 0) {
-                    reject("Ocorreu um erro ao curtir o comentário");
+                    reject("Ocorreu um erro ao atualizar a curtida do comentário");
+                    return;
                 }
 
                 resolve();
@@ -518,18 +522,22 @@ let musicService = {
         }
     },
     likeEventMusicComment: async function (id_comment, user_id) {
+        const likes = await functions.executeSQL(`
+            SELECT id
+            FROM curtidas_comentarios_musicas_eventos
+            WHERE id_usuario = ? AND id_comentario = ?
+            LIMIT 1
+        `, [user_id, id_comment]);
+
         const result = await functions.executeSQL(
-            `
-                INSERT INTO
-                    curtidas_comentarios_musicas_eventos
-                    (id_usuario, id_comentario)
-                VALUES
-                    (?, ?)
-            `, [user_id, id_comment]
+            likes.length > 0
+                ? `DELETE FROM curtidas_comentarios_musicas_eventos WHERE id_usuario = ? AND id_comentario = ?`
+                : `INSERT INTO curtidas_comentarios_musicas_eventos (id_usuario, id_comentario) VALUES (?, ?)`,
+            [user_id, id_comment]
         );
 
         if (result.affectedRows <= 0) {
-            throw "Ocorreu um erro ao curtir o comentario";
+            throw "Ocorreu um erro ao atualizar a curtida do comentario";
         }
     },
     updateEventMusicComment: async function (id_comment, user_id, message) {
