@@ -14,7 +14,8 @@ const eventMusic = Joi.object({
 
 module.exports = {
     churchId: Joi.object({
-        id_igreja: id
+        id_igreja: id,
+        tipo: Joi.string().valid("upcoming", "past", "all").optional()
     }),
     tag: Joi.object({
         id_igreja: id,

@@ -942,8 +942,19 @@ let churchService = {
             throw "Ocorreu um erro ao atualizar a curtida do comentario";
         }
     },
-    returnEvents: function (company_id) {
+    returnEvents: function (company_id, tipo = "upcoming") {
         return new Promise((resolve, reject) => {
+            let dateCondition = "e.data_inicio > DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)";
+            let orderBy = "e.data_inicio ASC";
+
+            if (tipo === "past") {
+                dateCondition = "e.data_inicio <= CURRENT_TIMESTAMP()";
+                orderBy = "e.data_inicio DESC";
+            } else if (tipo === "all") {
+                dateCondition = "1=1";
+                orderBy = "e.data_inicio DESC";
+            }
+
             functions.executeSQL(
                 `
                     SELECT
@@ -979,11 +990,11 @@ let churchService = {
                     WHERE
                         e.id_igreja = ?
                     AND
-                        e.data_inicio > DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+                        ${dateCondition}
                     GROUP BY
                         id_evento
                     ORDER BY
-                        e.data_inicio ASC;
+                        ${orderBy};
                 `, [company_id, company_id]
             ).then((results) => {
                 if (results.length == 0) {

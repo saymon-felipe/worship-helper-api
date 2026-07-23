@@ -8,7 +8,15 @@ const _pushNotificationService = require("../services/pushNotificationService");
 const _permissions = require("../functions/permissions.js");
 const { validateBody, validateParams } = require("../middleware/validate");
 const schemas = require("../validations/churchSchemas");
-const { requireAppAdministrator } = require("../functions/authClaims");
+const { requireAppAdministrator, isAppAdministrator } = require("../functions/authClaims");
+
+async function isEventPast(eventId) {
+    if (!eventId) return false;
+    const results = await functions.executeSQL(`SELECT data_inicio FROM eventos WHERE id = ?`, [eventId]);
+    if (results.length <= 0) return false;
+    const eventDate = new Date(results[0].data_inicio);
+    return eventDate < new Date();
+}
 
 function isPastEventDate(eventDate) {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(eventDate || ""));
@@ -520,9 +528,14 @@ router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req,
     })
 })
 
-router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.createEvent), (req, res, next) => {
-    if (isPastEventDate(req.body.event_date)) {
+router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.createEvent), async (req, res, next) => {
+    if (isPastEventDate(req.body.event_date) && !isAppAdministrator(req.usuario)) {
         return res.status(422).send("A data do evento não pode ser anterior a hoje");
+    }
+
+    const past = await isEventPast(req.params.id_evento);
+    if (past && !isAppAdministrator(req.usuario)) {
+        return res.status(422).send("Eventos encerrados não podem mais ter dados alterados");
     }
 
     _permissions.canEditEvent(req.params.id_evento, req.body.id_igreja, req.usuario.id_usuario).then((canEdit) => {
@@ -548,7 +561,7 @@ router.post("/retorna-eventos", login, validateBody(schemas.churchId), (req, res
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.returnEvents(req.body.id_igreja).then((results) => {
+        _churchService.returnEvents(req.body.id_igreja, req.body.tipo).then((results) => {
             let response = functions.createResponse("Retorno dos eventos da igreja", results, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
@@ -559,39 +572,36 @@ router.post("/retorna-eventos", login, validateBody(schemas.churchId), (req, res
     })
 })
 
-router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComment), (req, res, next) => {
-    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then(() => {
-        _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja).then((belongsToChurch) => {
-            if (!belongsToChurch) {
-                return res.status(404).send("Evento nao encontrado");
-            }
+router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComment), async (req, res, next) => {
+    try {
+        await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+        const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
+        if (!belongsToChurch) {
+            return res.status(404).send("Evento nao encontrado");
+        }
 
-            _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario).then((canComment) => {
-                if (!canComment) {
-                    return res.status(401).send("Apenas participantes do evento podem comentar");
-                }
+        const past = await isEventPast(req.body.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem novos comentários");
+        }
 
-                _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id).then((comment) => {
-                    _pushNotificationService.notifyEventComment({
-                        eventId: req.body.id_evento,
-                        actorId: req.usuario.id_usuario,
-                        message: req.body.mensagem
-                    }).catch((error) => console.error("[Push] Falha ao notificar comentario do evento:", error.message));
+        const canComment = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
+        if (!canComment) {
+            return res.status(401).send("Apenas participantes do evento podem comentar");
+        }
 
-                    let response = functions.createResponse("Comentario criado com sucesso", comment, "POST", 200);
-                    return res.status(200).send(response);
-                }).catch((error) => {
-                    return res.status(500).send(error);
-                })
-            }).catch((error) => {
-                return res.status(401).send(error);
-            })
-        }).catch((error) => {
-            return res.status(401).send(error);
-        })
-    }).catch((error) => {
+        const comment = await _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id);
+        _pushNotificationService.notifyEventComment({
+            eventId: req.body.id_evento,
+            actorId: req.usuario.id_usuario,
+            message: req.body.mensagem
+        }).catch((error) => console.error("[Push] Falha ao notificar comentario do evento:", error.message));
+
+        let response = functions.createResponse("Comentario criado com sucesso", comment, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
         return res.status(401).send(error);
-    })
+    }
 })
 
 router.post("/eventos/comentarios/retorna", login, validateBody(schemas.eventComments), (req, res, next) => {
@@ -623,6 +633,11 @@ router.post("/eventos/comentarios/like", login, validateBody(schemas.likeEventCo
             return res.status(404).send("Evento nao encontrado");
         }
 
+        const past = await isEventPast(req.body.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem curtir comentários");
+        }
+
         const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
         if (!isParticipant) {
             return res.status(401).send("Apenas participantes do evento podem curtir comentários");
@@ -643,6 +658,11 @@ router.post("/eventos/comentarios/editar", login, validateBody(schemas.updateEve
         const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
         if (!belongsToChurch) {
             return res.status(404).send("Evento nao encontrado");
+        }
+
+        const past = await isEventPast(req.body.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem editar comentários");
         }
 
         const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
@@ -676,6 +696,11 @@ router.post("/eventos/comentarios/deletar", login, validateBody(schemas.deleteEv
         const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
         if (!belongsToChurch) {
             return res.status(404).send("Evento nao encontrado");
+        }
+
+        const past = await isEventPast(req.body.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem excluir comentários");
         }
 
         const isParticipant = await _permissions.isEventParticipant(req.body.id_evento, req.usuario.id_usuario);
@@ -758,6 +783,12 @@ router.post("/eventos/membros/anotacoes/criar", login, validateBody(schemas.crea
         if (!eventBelongsToChurch || !memberIsParticipant) {
             return res.status(404).send("Participante não encontrado neste evento");
         }
+
+        const past = await isEventPast(req.body.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem criar anotações");
+        }
+
         if (!authorIsParticipant) {
             return res.status(401).send("Apenas participantes do evento podem criar anotações");
         }
@@ -833,6 +864,12 @@ router.post("/eventos/membros/anotacoes/editar", login, validateBody(schemas.upd
         }
 
         const note = results[0];
+
+        const past = await isEventPast(note.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem editar anotações");
+        }
+
         const isOwner = Number(note.id_usuario_criador) === Number(req.usuario.id_usuario);
         const isParticipant = await _permissions.isEventParticipant(note.id_evento, req.usuario.id_usuario);
         if (!isOwner || !isParticipant) {
@@ -861,6 +898,12 @@ router.post("/eventos/membros/anotacoes/deletar", login, validateBody(schemas.de
         }
 
         const note = results[0];
+
+        const past = await isEventPast(note.id_evento);
+        if (past && !isAppAdministrator(req.usuario)) {
+            return res.status(403).send("Eventos encerrados não permitem excluir anotações");
+        }
+
         const isOwner = Number(note.id_usuario_criador) === Number(req.usuario.id_usuario);
         const isParticipant = await _permissions.isEventParticipant(note.id_evento, req.usuario.id_usuario);
         if (!isOwner || !isParticipant) {
