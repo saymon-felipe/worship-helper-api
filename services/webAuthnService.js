@@ -53,6 +53,13 @@ async function hasCredentials(userId) {
     return credentials.length > 0;
 }
 
+async function removeCredentials(userId) {
+    await Promise.all([
+        functions.executeSQL("DELETE FROM webauthn_credentials WHERE id_usuario = ?", [userId]),
+        functions.executeSQL("DELETE FROM webauthn_challenges WHERE id_usuario = ?", [userId])
+    ]);
+}
+
 async function saveChallenge(userId, type, challenge) {
     await functions.executeSQL("DELETE FROM webauthn_challenges WHERE id_usuario = ? AND tipo = ?", [userId, type]);
     await functions.executeSQL(`
@@ -188,5 +195,6 @@ module.exports = {
     verifyRegistration,
     authenticationOptions,
     verifyAuthentication,
-    hasCredentials
+    hasCredentials,
+    removeCredentials
 };

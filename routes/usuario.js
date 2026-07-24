@@ -116,6 +116,14 @@ router.get("/biometria/status", login, async (req, res) => {
         return res.status(400).send({ error: error.message || "Não foi possível consultar a biometria." });
     }
 });
+router.delete("/biometria", login, async (req, res) => {
+    try {
+        await _webAuthnService.removeCredentials(req.usuario.id_usuario);
+        return res.status(200).send(functions.createResponse("Biometria desativada com sucesso", null, "DELETE", 200));
+    } catch (error) {
+        return res.status(400).send({ error: error.message || "Não foi possível desativar a biometria." });
+    }
+});
 router.post("/biometria/login/opcoes", validateBody(schemas.biometricEmail), async (req, res) => {
     try {
         const options = await _webAuthnService.authenticationOptions(req.body.email_usuario);
