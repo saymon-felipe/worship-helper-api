@@ -4,6 +4,8 @@ const login = require("../middleware/login");
 const functions = require("../functions/functions.js");
 const _musicService = require("../services/musicService");
 const ciphers = require("../functions/cyphers.js");
+const cipherPdfImporter = require("../services/cipherPdfImporter.js");
+const uploadConfig = require("../config/upload.js");
 const { validateBody, validateParams, validateQuery } = require("../middleware/validate");
 const schemas = require("../validations/musicSchemas");
 const _permissions = require("../functions/permissions.js");
@@ -73,6 +75,19 @@ async function canAccessRequestedMusic(req, res) {
     return true;
 }
 
+function uploadCipherPdf(req, res, next) {
+    const upload = uploadConfig.createCipherPdfUpload().single("cipher_pdf");
+
+    upload(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+
+        const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+        return res.status(status).send(error.message || "Arquivo PDF invalido");
+    });
+}
+
 router.post("/procurar", login, validateBody(schemas.search), async (req, res, next) => {
     if (!(await canUseMusicPermission(req, res, "music.create"))) {
         return;
@@ -99,12 +114,33 @@ router.post("/procurar-cifra", login, validateBody(schemas.search), async (req, 
     })
 })
 
+router.post("/importar-cifra-pdf", login, uploadCipherPdf, validateBody(schemas.importCipherPdf), async (req, res, next) => {
+    if (!(await canUseMusicPermission(req, res, "music.create"))) {
+        return;
+    }
+
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).send("Arquivo PDF nao enviado");
+    }
+
+    try {
+        const importedCipher = await cipherPdfImporter.extractCipherPdf(req.file.buffer);
+        let response = functions.createResponse("Cifra importada do PDF com sucesso", importedCipher, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        return res.status(error.status || 500).send(error.message || error);
+    }
+})
+
 router.post("/", login, validateBody(schemas.create), async (req, res, next) => {
     if (!(await canUseMusicPermission(req, res, "music.create"))) {
         return;
     }
 
-    _musicService.createMusic(req.body.id_igreja, req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags).then(async (music) => {
+    _musicService.createMusic(req.body.id_igreja, req.body.name, req.body.artist, req.body.video_url, req.body.cipher_url, req.body.cipher_title, req.body.video_image, req.body.music_tags, {
+        cipher_source: req.body.cipher_source,
+        cipher_text: req.body.cipher_text
+    }).then(async (music) => {
         const createdMusic = await _musicService.returnMusic(music.id_musica, req.body.id_igreja);
         let response = functions.createResponse("Musica cadastrada com sucesso no banco de dados", createdMusic, "POST", 200);
         return res.status(200).send(response);

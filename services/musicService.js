@@ -2,6 +2,7 @@ const zlib = require("zlib");
 const functions = require("../functions/functions.js");
 const ciphers = require("../functions/cyphers.js");
 const uploadConfig = require("../config/upload.js");
+const { normalizeImportedCipherText } = require("./cipherPdfImporter.js");
 const { randomUUID } = require("crypto");
 
 const GOOGLE_API_URL = "https://www.googleapis.com/youtube/v3/search";
@@ -72,6 +73,45 @@ function decompressCipherText(content, encoding) {
 
 function createCipherVersion() {
     return `${Date.now().toString(36)}-${randomUUID()}`;
+}
+
+async function resolveCipherPayload(source, name, cipher_url, cipher_title, cipher_text) {
+    if (source === "custom_pdf") {
+        const normalizedCipherText = normalizeImportedCipherText(cipher_text);
+
+        if (!normalizedCipherText) {
+            throw createApiError("Cifra importada vazia", 422);
+        }
+
+        return {
+            text: normalizedCipherText,
+            title: cipher_title || name,
+            url: ""
+        };
+    }
+
+    if (!cipher_url) {
+        throw createApiError("URL da cifra obrigatoria", 400);
+    }
+
+    const cipherContent = await ciphers.scrapeCifraContent(cipher_url);
+
+    return {
+        text: cipherContent.text,
+        title: cipher_title || cipherContent.title || "",
+        url: cipher_url
+    };
+}
+
+async function writeCipherContent(church_id, music_id, cipher_text) {
+    const cipherVersion = createCipherVersion();
+    const cipherKey = `igrejas/${church_id}/musicas/${music_id}/cifras/${cipherVersion}.txt.gz`;
+    await uploadConfig.putCipher(cipherKey, compressCipherText(cipher_text) || zlib.gzipSync(Buffer.from("")));
+
+    return {
+        cipherKey,
+        cipherVersion
+    };
 }
 
 async function requestYoutubeJson(url, params) {
@@ -202,7 +242,7 @@ let musicService = {
             })
         })
     },
-    createMusic: async function (church_id, name, artist, video_url, cipher_url, cipher_title, thumbnail, music_tags) {
+    createMusic: async function (church_id, name, artist, video_url, cipher_url, cipher_title, thumbnail, music_tags, options = {}) {
         const results = await functions.executeSQL(
             `
                 SELECT
@@ -225,9 +265,14 @@ let musicService = {
             throw "URL do video invalida";
         }
 
-        const cipherContent = await ciphers.scrapeCifraContent(cipher_url);
-        const compressedCipher = compressCipherText(cipherContent.text);
-        const resolvedCipherTitle = cipher_title || cipherContent.title || "";
+        const cipherSource = options.cipher_source || "cifra_club";
+        const cipherPayload = await resolveCipherPayload(
+            cipherSource,
+            name,
+            cipher_url,
+            cipher_title,
+            options.cipher_text
+        );
 
         const inserted = await functions.executeSQL(
             `
@@ -237,20 +282,21 @@ let musicService = {
                 VALUES
                     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
-            [church_id, name, artist, video_url, cipher_url, resolvedCipherTitle, "", "", thumbnail, videoId]
+            [church_id, name, artist, video_url, cipherPayload.url, cipherPayload.title, "", "", thumbnail, videoId]
         );
 
-        const cipherVersion = createCipherVersion();
-        const cipherKey = `igrejas/${church_id}/musicas/${inserted.insertId}/cifras/${cipherVersion}.txt.gz`;
+        let cipherUpload;
 
         try {
-            await uploadConfig.putCipher(cipherKey, compressedCipher || zlib.gzipSync(Buffer.from("")));
+            cipherUpload = await writeCipherContent(church_id, inserted.insertId, cipherPayload.text);
             await functions.executeSQL(
                 `UPDATE musicas SET cifra_s3_key = ?, cifra_versao = ? WHERE id_musica = ?`,
-                [cipherKey, cipherVersion, inserted.insertId]
+                [cipherUpload.cipherKey, cipherUpload.cipherVersion, inserted.insertId]
             );
         } catch (error) {
-            await uploadConfig.deleteFromS3(cipherKey).catch(() => null);
+            if (cipherUpload && cipherUpload.cipherKey) {
+                await uploadConfig.deleteFromS3(cipherUpload.cipherKey).catch(() => null);
+            }
             await functions.executeSQL(`DELETE FROM musicas WHERE id_musica = ?`, [inserted.insertId]);
             throw error;
         }
@@ -640,9 +686,7 @@ let musicService = {
             throw new Error("Música não encontrada");
         }
 
-        const cipherVersion = createCipherVersion();
-        const cipherKey = `igrejas/${church_id}/musicas/${music_id}/cifras/${cipherVersion}.txt.gz`;
-        await uploadConfig.putCipher(cipherKey, compressCipherText(cipher_text) || zlib.gzipSync(Buffer.from("")));
+        const { cipherKey, cipherVersion } = await writeCipherContent(church_id, music_id, cipher_text);
         try {
             await functions.executeSQL(
                 `UPDATE musicas SET cifra_s3_key = ?, cifra_versao = ?, cifra_conteudo = '', cifra_encoding = '' WHERE id_musica = ? AND id_igreja = ?`,

@@ -5,6 +5,7 @@ const { randomUUID } = require('crypto');
 
 const bucket = process.env.S3_BUCKET || 'worship-helper-bucket';
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_CIPHER_PDF_SIZE = 5 * 1024 * 1024;
 const imageExtensions = {
     'image/jpeg': '.jpg',
     'image/png': '.png',
@@ -41,6 +42,20 @@ function fileFilter(req, file, cb) {
     cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
 }
 
+function pdfFileFilter(req, file, cb) {
+    const isPdf = file.mimetype === 'application/pdf'
+        || String(file.originalname || '').toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
+        cb(null, true);
+        return;
+    }
+
+    const error = new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname);
+    error.message = 'Envie um arquivo PDF valido';
+    cb(error);
+}
+
 function createImageUpload(pathResolver) {
     return multer({
         storage: multerS3({
@@ -63,6 +78,17 @@ function createImageUpload(pathResolver) {
             files: 10
         },
         fileFilter
+    });
+}
+
+function createCipherPdfUpload() {
+    return multer({
+        storage: multer.memoryStorage(),
+        limits: {
+            fileSize: MAX_CIPHER_PDF_SIZE,
+            files: 1
+        },
+        fileFilter: pdfFileFilter
     });
 }
 
@@ -92,7 +118,9 @@ async function deleteFiles(files) {
 
 module.exports = {
     MAX_IMAGE_SIZE,
+    MAX_CIPHER_PDF_SIZE,
     createImageUpload,
+    createCipherPdfUpload,
     keyFromLocation,
     deleteFromS3: async (key) => s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })),
     deleteFiles,

@@ -11,12 +11,25 @@ module.exports = {
         artist: Joi.string().trim().max(50).allow("").default(""),
         id_igreja: id,
         video_url: Joi.string().trim().max(100).required(),
-        cipher_url: Joi.string().trim().max(500).allow("").required(),
+        cipher_source: Joi.string().valid("cifra_club", "custom_pdf").default("cifra_club"),
+        cipher_url: Joi.when("cipher_source", {
+            is: "custom_pdf",
+            then: Joi.string().trim().max(500).allow("").default(""),
+            otherwise: Joi.string().trim().max(500).required()
+        }),
         cipher_title: Joi.string().trim().max(255).allow("").default(""),
+        cipher_text: Joi.when("cipher_source", {
+            is: "custom_pdf",
+            then: Joi.string().max(200000).required(),
+            otherwise: Joi.string().max(200000).allow("").default("")
+        }),
         video_image: Joi.string().trim().max(500).required(),
         music_tags: Joi.array().items(Joi.object({
             id
         }).unknown(true)).required()
+    }),
+    importCipherPdf: Joi.object({
+        id_igreja: id
     }),
     musicParams: Joi.object({
         music_id: id
