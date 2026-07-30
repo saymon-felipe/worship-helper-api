@@ -3,12 +3,12 @@ const { Joi, id, text } = require("./common");
 module.exports = {
     search: Joi.object({
         name: text(50),
-        artist: text(50),
+        artist: Joi.string().trim().max(50).allow("").default(""),
         id_igreja: Joi.number().integer().positive().optional()
     }),
     create: Joi.object({
         name: text(50),
-        artist: text(50),
+        artist: Joi.string().trim().max(50).allow("").default(""),
         id_igreja: id,
         video_url: Joi.string().trim().max(100).required(),
         cipher_url: Joi.string().trim().max(500).allow("").required(),
