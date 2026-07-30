@@ -1,6 +1,8 @@
 const zlib = require("zlib");
 const functions = require("../functions/functions.js");
 const ciphers = require("../functions/cyphers.js");
+const uploadConfig = require("../config/upload.js");
+const { randomUUID } = require("crypto");
 
 const GOOGLE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 const GOOGLE_VIDEO_DETAILS_URL = "https://www.googleapis.com/youtube/v3/videos";
@@ -66,6 +68,10 @@ function decompressCipherText(content, encoding) {
     }
 
     return Buffer.from(content).toString("utf8");
+}
+
+function createCipherVersion() {
+    return `${Date.now().toString(36)}-${randomUUID()}`;
 }
 
 async function requestYoutubeJson(url, params) {
@@ -231,8 +237,23 @@ let musicService = {
                 VALUES
                     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
-            [church_id, name, artist, video_url, cipher_url, resolvedCipherTitle, compressedCipher, "gzip", thumbnail, videoId]
+            [church_id, name, artist, video_url, cipher_url, resolvedCipherTitle, "", "", thumbnail, videoId]
         );
+
+        const cipherVersion = createCipherVersion();
+        const cipherKey = `igrejas/${church_id}/musicas/${inserted.insertId}/cifras/${cipherVersion}.txt.gz`;
+
+        try {
+            await uploadConfig.putCipher(cipherKey, compressedCipher || zlib.gzipSync(Buffer.from("")));
+            await functions.executeSQL(
+                `UPDATE musicas SET cifra_s3_key = ?, cifra_versao = ? WHERE id_musica = ?`,
+                [cipherKey, cipherVersion, inserted.insertId]
+            );
+        } catch (error) {
+            await uploadConfig.deleteFromS3(cipherKey).catch(() => null);
+            await functions.executeSQL(`DELETE FROM musicas WHERE id_musica = ?`, [inserted.insertId]);
+            throw error;
+        }
 
         await this.insertMusicTags(inserted.insertId, music_tags);
         return { id_musica: inserted.insertId };
@@ -249,7 +270,7 @@ let musicService = {
                         m.id_igreja = ?
                 `, [church_id]
             ).then((results) => {
-                functions.returnFormattedMusics(results).then((results2) => {
+                functions.returnFormattedMusics(results).then(async (results2) => {
                     resolve(results2);
                 }).catch((error) => {
                     reject(error);
@@ -288,14 +309,17 @@ let musicService = {
                         m.id_igreja = ?
                 `, [event_id, event_id, music_id, church_id]
             ).then((results) => {
-                functions.returnFormattedMusics(results).then((results2) => {
+                functions.returnFormattedMusics(results).then(async (results2) => {
                     if (!results2[0]) {
                         resolve(results2[0]);
                         return;
                     }
 
-                    results2[0].cipher_text = decompressCipherText(results[0].cifra_conteudo, results[0].cifra_encoding);
+                    results2[0].cipher_text = results[0].cifra_s3_key
+                        ? decompressCipherText(await uploadConfig.getCipher(results[0].cifra_s3_key), "gzip")
+                        : decompressCipherText(results[0].cifra_conteudo, results[0].cifra_encoding);
                     results2[0].cipher_title = results[0].cifra_titulo || "";
+                    results2[0].cipher_version = results[0].cifra_versao || "legacy";
                     resolve(results2[0]);
                 }).catch((error) => {
                     reject(error);
@@ -307,7 +331,7 @@ let musicService = {
     },
     musicBelongsToChurch: async function (music_id, church_id) {
         const results = await functions.executeSQL(
-            `SELECT id_musica FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
+            `SELECT id_musica, cifra_s3_key FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
             [music_id, church_id]
         );
 
@@ -607,7 +631,34 @@ let musicService = {
             })
         })
     },
-    updateCipher: function (music_id, church_id, cipher_text) {
+    updateCipher: async function (music_id, church_id, cipher_text) {
+        const [music] = await functions.executeSQL(
+            `SELECT cifra_s3_key FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
+            [music_id, church_id]
+        );
+        if (!music) {
+            throw new Error("Música não encontrada");
+        }
+
+        const cipherVersion = createCipherVersion();
+        const cipherKey = `igrejas/${church_id}/musicas/${music_id}/cifras/${cipherVersion}.txt.gz`;
+        await uploadConfig.putCipher(cipherKey, compressCipherText(cipher_text) || zlib.gzipSync(Buffer.from("")));
+        try {
+            await functions.executeSQL(
+                `UPDATE musicas SET cifra_s3_key = ?, cifra_versao = ?, cifra_conteudo = '', cifra_encoding = '' WHERE id_musica = ? AND id_igreja = ?`,
+                [cipherKey, cipherVersion, music_id, church_id]
+            );
+        } catch (error) {
+            await uploadConfig.deleteFromS3(cipherKey).catch(() => null);
+            throw error;
+        }
+
+        if (music.cifra_s3_key) {
+            await uploadConfig.deleteFromS3(music.cifra_s3_key).catch(() => null);
+        }
+        return { cipher_version: cipherVersion };
+
+        /* Legacy database storage kept here for migration history only.
         return new Promise((resolve, reject) => {
             const compressed = compressCipherText(cipher_text);
             functions.executeSQL(
@@ -633,10 +684,11 @@ let musicService = {
                 reject(error);
             });
         });
+        */
     },
     deleteMusic: async function (music_id, church_id) {
         const [music] = await functions.executeSQL(
-            `SELECT id_musica FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
+            `SELECT id_musica, cifra_s3_key FROM musicas WHERE id_musica = ? AND id_igreja = ?`,
             [music_id, church_id]
         );
 
@@ -672,6 +724,9 @@ let musicService = {
         
         if (result.affectedRows === 0) {
             throw new Error("Música não encontrada ou já excluída");
+        }
+        if (music.cifra_s3_key) {
+            await uploadConfig.deleteFromS3(music.cifra_s3_key).catch(() => null);
         }
     }
 }

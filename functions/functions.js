@@ -176,6 +176,7 @@ let functions = {
                     cipher_url: music.cifra_url,
                     image: music.imagem,
                     video_id: music.video_id,
+                    cipher_version: music.cifra_versao || "legacy",
                     tags: [],
                     tom: music.tom
                 }

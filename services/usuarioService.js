@@ -403,9 +403,9 @@ let usuarioService = {
             functions.executeSQL("SELECT imagem_usuario FROM usuario WHERE id_usuario = ?",
             [user_id])
             .then((results) => {
-                let photo_url = results[0].imagem_usuario.split("/")[3];
+                const photoKey = uploadConfig.keyFromLocation(results[0].imagem_usuario);
 
-                uploadConfig.deleteFromS3(photo_url);
+                uploadConfig.deleteFromS3(photoKey);
 
                 functions.executeSQL("update usuario set imagem_usuario = ? where id_usuario = ?",
                 [process.env.URL_API + "/public/default-user-image.png", user_id])

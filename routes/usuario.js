@@ -187,7 +187,7 @@ router.patch("/remove_image", login, (req, res, next) => {
         return res.status(500).send(error);
     })
 });
-router.patch("/update_image", login, uploadConfig.upload.single('imagem_usuario'), (req, res, next) => {
+router.patch("/update_image", login, uploadConfig.createImageUpload((request) => `usuarios/${request.usuario.id_usuario}/imagens`).single('imagem_usuario'), (req, res, next) => {
     if (req.file == undefined) {
         return res.status(500).send({ error: "Tipo de arquivo não suportado" });
     }

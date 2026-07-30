@@ -230,13 +230,13 @@ router.post("/retorna-membros", login, validateBody(schemas.churchId), (req, res
     })
 })
 
-router.post("/publicar-aviso", login, validateBody(schemas.warning), (req, res, next) => {
+router.post("/publicar-aviso", login, uploadConfig.createImageUpload((request) => `igrejas/${request.body.id_igreja}/avisos/imagens`).array("imagens", 10), validateBody(schemas.warning), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!req.body.parent_id && !_permissions.hasPermission(permission, "warnings.create")) {
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario, req.body.parent_id).then((warning) => {
+        _churchService.postWarning(req.body.id_igreja, req.body.mensagem, req.usuario.id_usuario, req.body.parent_id, req.files || []).then((warning) => {
             if (!req.body.parent_id) {
                 _pushNotificationService.notifyChurchWarning({
                     churchId: req.body.id_igreja,
@@ -313,9 +313,11 @@ router.post("/ultimo-aviso", login, validateBody(schemas.churchId), (req, res, n
             let response = functions.createResponse("Retorno do último aviso da igreja", results, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
+            uploadConfig.deleteFiles(req.files).catch(() => null);
             return res.status(500).send(error);
         })
     }).catch((error) => {
+        uploadConfig.deleteFiles(req.files).catch(() => null);
         return res.status(401).send(error);
     })
 })
@@ -468,7 +470,7 @@ router.post("/cadastrar-igreja", login, validateBody(schemas.createChurch), (req
     })
 })
 
-router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('church_image'), (req, res, next) => {
+router.patch("/church-image/:id_igreja", login, uploadConfig.createImageUpload((request) => `igrejas/${request.params.id_igreja}/imagens`).single('church_image'), (req, res, next) => {
     if (req.file == undefined) {
         let response = functions.createResponse("Tipo de arquivo não suportado", null, "POST", 500);
         return res.status(500).send(response);
@@ -482,7 +484,7 @@ router.patch("/church-image/:id_igreja", login, uploadConfig.upload.single('chur
         // Busca a imagem antiga para excluir do S3
         _churchService.returnChurch(req.params.id_igreja).then((churchObj) => {
             const oldUrl = churchObj.imagem_igreja || "";
-            const oldKey = oldUrl.split("/").pop();
+            const oldKey = uploadConfig.keyFromLocation(oldUrl);
             if (oldKey && !oldUrl.includes("church-default-image.jpg")) {
                 uploadConfig.deleteFromS3(oldKey).catch(e => console.log("Erro ao deletar imagem antiga do S3:", e));
             }
@@ -572,7 +574,7 @@ router.post("/retorna-eventos", login, validateBody(schemas.churchId), (req, res
     })
 })
 
-router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComment), async (req, res, next) => {
+router.post("/eventos/comentarios/criar", login, uploadConfig.createImageUpload((request) => `igrejas/${request.body.id_igreja}/eventos/${request.body.id_evento}/comentarios/imagens`).array("imagens", 10), validateBody(schemas.eventComment), async (req, res, next) => {
     try {
         await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
         const belongsToChurch = await _permissions.eventBelongsToChurch(req.body.id_evento, req.body.id_igreja);
@@ -590,7 +592,7 @@ router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComme
             return res.status(401).send("Apenas participantes do evento podem comentar");
         }
 
-        const comment = await _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id);
+        const comment = await _churchService.postEventComment(req.body.mensagem, req.usuario.id_usuario, req.body.id_evento, req.body.parent_id, req.files || []);
         _pushNotificationService.notifyEventComment({
             eventId: req.body.id_evento,
             actorId: req.usuario.id_usuario,
@@ -600,6 +602,7 @@ router.post("/eventos/comentarios/criar", login, validateBody(schemas.eventComme
         let response = functions.createResponse("Comentario criado com sucesso", comment, "POST", 200);
         return res.status(200).send(response);
     } catch (error) {
+        uploadConfig.deleteFiles(req.files).catch(() => null);
         return res.status(401).send(error);
     }
 })
@@ -716,6 +719,14 @@ router.post("/eventos/comentarios/deletar", login, validateBody(schemas.deleteEv
             return res.status(404).send("Comentário não encontrado neste evento");
         }
 
+        const images = await functions.executeSQL(
+            `SELECT s3_key FROM imagens_comentarios_eventos
+             WHERE id_comentario IN (
+                SELECT id FROM comentarios_eventos
+                WHERE (id = ? OR parent_id = ?) AND id_evento = ?
+             )`,
+            [req.body.id_comentario, req.body.id_comentario, req.body.id_evento]
+        );
         await functions.executeSQL(
             `DELETE FROM curtidas_comentarios_eventos
              WHERE id_comentario IN (
@@ -728,6 +739,7 @@ router.post("/eventos/comentarios/deletar", login, validateBody(schemas.deleteEv
             `DELETE FROM comentarios_eventos WHERE (id = ? OR parent_id = ?) AND id_evento = ?`,
             [req.body.id_comentario, req.body.id_comentario, req.body.id_evento]
         );
+        await Promise.all(images.map((image) => uploadConfig.deleteFromS3(image.s3_key).catch(() => null)));
         let response = functions.createResponse("Comentário do evento removido com sucesso", null, "POST", 200);
         return res.status(200).send(response);
     } catch (error) {

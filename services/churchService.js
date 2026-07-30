@@ -2,6 +2,24 @@ const functions = require("../functions/functions.js");
 const _permissions = require("../functions/permissions.js");
 const { parsePermissions } = require("../functions/permissionKeys");
 const _emailService = require("./emailService");
+const uploadConfig = require("../config/upload.js");
+
+async function attachImages(items, table, foreignKey) {
+    const ids = items.map((item) => item.id_aviso).filter(Boolean);
+    if (ids.length === 0) return items;
+
+    const images = await functions.executeSQL(
+        `SELECT ${foreignKey} AS parent_id, imagem_url, s3_key FROM ${table} WHERE ${foreignKey} IN (${ids.map(() => '?').join(',')}) ORDER BY id ASC`,
+        ids
+    );
+    const byParent = new Map();
+    images.forEach((image) => {
+        const list = byParent.get(image.parent_id) || [];
+        list.push({ url: image.imagem_url, key: image.s3_key });
+        byParent.set(image.parent_id, list);
+    });
+    return items.map((item) => ({ ...item, imagens: byParent.get(item.id_aviso) || [] }));
+}
 
 let churchService = {
     returnChurches: function () {
@@ -246,7 +264,7 @@ let churchService = {
             })
         })
     },
-    postWarning: function (company_id, message, user_id, parent_id = null) {
+    postWarning: function (company_id, message, user_id, parent_id = null, images = []) {
         return new Promise((resolve, reject) => {
             if (message.length > 100) {
                 reject("Mensagem é muito grande, limite de 100 caracteres");
@@ -264,7 +282,15 @@ let churchService = {
                     reject("Não foi possível publicar o aviso");
                 }
 
-                resolve({ id_aviso: results.insertId });
+                Promise.all(images.map((image) => functions.executeSQL(
+                    `INSERT INTO imagens_avisos_igreja (id_aviso, s3_key, imagem_url) VALUES (?, ?, ?)`,
+                    [results.insertId, image.key, image.location]
+                ))).then(() => {
+                    resolve({
+                        id_aviso: results.insertId,
+                        imagens: images.map((image) => ({ url: image.location, key: image.key }))
+                    });
+                }).catch(reject);
             }).catch((error) => {
                 reject(error);
             })
@@ -381,7 +407,7 @@ let churchService = {
                     }
                 })
 
-                resolve(avisos);
+                attachImages(avisos, "imagens_avisos_igreja", "id_aviso").then(resolve).catch(reject);
             }).catch((error) => {
                 reject(error);
             })
@@ -450,6 +476,11 @@ let churchService = {
             throw "Aviso nao encontrado";
         }
 
+        const images = await functions.executeSQL(
+            `SELECT s3_key FROM imagens_avisos_igreja WHERE id_aviso IN (${warningIds.map(() => "?").join(",")})`,
+            warningIds
+        );
+
         await functions.executeSQL(`
             DELETE FROM
                 curtidas_avisos
@@ -463,6 +494,8 @@ let churchService = {
             WHERE
                 id_aviso_igreja IN (${warningIds.map(() => "?").join(",")})
         `, warningIds);
+
+        await Promise.all(images.map((image) => uploadConfig.deleteFromS3(image.s3_key).catch(() => null)));
     },
     sendInvite: async function (company_id, user_id, requesting_user_id, email_usuario = "") {
         const normalizedEmail = String(email_usuario || "").trim().toLowerCase();
@@ -858,7 +891,7 @@ let churchService = {
 
         await Promise.all(promises);
     },
-    postEventComment: async function (message, user_id, event_id, parent_id = null) {
+    postEventComment: async function (message, user_id, event_id, parent_id = null, images = []) {
         if (message.length > 280) {
             throw "Mensagem e muito grande, limite de 280 caracteres";
         }
@@ -875,7 +908,15 @@ let churchService = {
             throw "Nao foi possivel publicar o comentario";
         }
 
-        return { id_aviso: result.insertId };
+        await Promise.all(images.map((image) => functions.executeSQL(
+            `INSERT INTO imagens_comentarios_eventos (id_comentario, s3_key, imagem_url) VALUES (?, ?, ?)`,
+            [result.insertId, image.key, image.location]
+        )));
+
+        return {
+            id_aviso: result.insertId,
+            imagens: images.map((image) => ({ url: image.location, key: image.key }))
+        };
     },
     returnEventComments: async function (event_id, user_id) {
         const results = await functions.executeSQL(`
@@ -905,7 +946,7 @@ let churchService = {
                 ce.data_criacao DESC
         `, [user_id, event_id]);
 
-        return results.map((comment) => ({
+        const comments = results.map((comment) => ({
             id_aviso: comment.id,
             id_criador: comment.id_usuario,
             mensagem: comment.mensagem,
@@ -918,6 +959,8 @@ let churchService = {
                 imagem_usuario: comment.imagem_usuario
             }
         }));
+
+        return attachImages(comments, "imagens_comentarios_eventos", "id_comentario");
     },
     likeEventComment: async function (id_comment, user_id) {
         const likes = await functions.executeSQL(`
