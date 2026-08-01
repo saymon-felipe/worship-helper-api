@@ -135,7 +135,246 @@ async function requestYoutubeJson(url, params) {
     return response.json();
 }
 
+function normalizeRecognitionText(value = "") {
+    return String(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+}
+
+function similarity(left, right) {
+    const leftTerms = new Set(normalizeRecognitionText(left).split(" ").filter(Boolean));
+    const rightTerms = new Set(normalizeRecognitionText(right).split(" ").filter(Boolean));
+
+    if (leftTerms.size === 0 || rightTerms.size === 0) {
+        return 0;
+    }
+
+    let shared = 0;
+    leftTerms.forEach((term) => {
+        if (rightTerms.has(term)) {
+            shared += 1;
+        }
+    });
+
+    return shared / Math.max(leftTerms.size, rightTerms.size);
+}
+
+function liveAssistantLog(traceId, label, payload) {
+    const prefix = `[LiveAssistant${traceId ? ` ${traceId}` : ""}] ${label}`;
+
+    if (payload === undefined) {
+        console.log(prefix);
+        return;
+    }
+
+    try {
+        console.log(`${prefix}: ${JSON.stringify(payload, null, 2)}`);
+    } catch (error) {
+        console.log(prefix, payload);
+    }
+}
+
+async function recognizeWithAudD(audioBuffer, mimeType, traceId) {
+    const token = process.env.AUDD_API_TOKEN;
+
+    if (!token) {
+        liveAssistantLog(traceId, "AUDD_API_TOKEN ausente");
+        throw createApiError("Reconhecimento de audio indisponivel. Configure AUDD_API_TOKEN.", 503);
+    }
+
+    liveAssistantLog(traceId, "Enviando trecho para AudD", {
+        bytes: audioBuffer?.length || 0,
+        mimeType: mimeType || "audio/webm"
+    });
+
+    const form = new FormData();
+    form.append("api_token", token);
+    form.append("return", "apple_music,spotify");
+    form.append("file", new Blob([audioBuffer], { type: mimeType || "audio/webm" }), "trecho.webm");
+
+    const response = await fetch("https://api.audd.io/", {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(25000)
+    });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        liveAssistantLog(traceId, "Falha HTTP ao consultar AudD", {
+            status: response.status,
+            body: errorBody
+        });
+        throw createApiError("Falha ao consultar o reconhecimento de audio.", 502);
+    }
+
+    const payload = await response.json();
+    liveAssistantLog(traceId, "Resposta do AudD", payload);
+
+    const result = payload && payload.result;
+
+    if (!result || !result.title) {
+        liveAssistantLog(traceId, "AudD nao identificou musica", {
+            status: payload?.status,
+            error: payload?.error || null,
+            hasResult: Boolean(result)
+        });
+        return null;
+    }
+
+    liveAssistantLog(traceId, "Musica reconhecida pelo AudD", {
+        title: result.title,
+        artist: result.artist || "",
+        album: result.album || "",
+        releaseDate: result.release_date || ""
+    });
+
+    return {
+        name: result.title,
+        artist: result.artist || "",
+        confidence: 0.9
+    };
+}
+
+async function findChurchMusicMatches(churchId, recognition, traceId) {
+    const rows = await functions.executeSQL(
+        `SELECT id_musica, nome_musica, artista_musica FROM musicas WHERE id_igreja = ?`,
+        [churchId]
+    );
+
+    liveAssistantLog(traceId, "Buscando correspondencias na biblioteca da igreja", {
+        churchId,
+        totalMusics: rows.length,
+        recognizedName: recognition.name,
+        recognizedArtist: recognition.artist
+    });
+
+    const scoredMatches = rows
+        .map((row) => {
+            const nameScore = similarity(recognition.name, row.nome_musica);
+            const artistScore = recognition.artist ? similarity(recognition.artist, row.artista_musica) : 0;
+            return {
+                id: row.id_musica,
+                name: row.nome_musica,
+                artist: row.artista_musica,
+                score: (nameScore * 0.8) + (artistScore * 0.2)
+            };
+        })
+        .sort((left, right) => right.score - left.score);
+
+    liveAssistantLog(traceId, "Melhores scores na biblioteca", scoredMatches.slice(0, 5));
+
+    const matches = scoredMatches
+        .filter((match) => match.score >= 0.55)
+        .slice(0, 3);
+
+    liveAssistantLog(traceId, "Correspondencias aceitas da biblioteca", matches);
+
+    return matches;
+}
+
 let musicService = {
+    identifyLiveMusic: async function ({ churchId, eventId, audioBuffer, mimeType, detectedTone, traceId }) {
+        liveAssistantLog(traceId, "Iniciando identificacao", {
+            churchId,
+            eventId,
+            bytes: audioBuffer?.length || 0,
+            mimeType,
+            detectedTone
+        });
+
+        const recognition = await recognizeWithAudD(audioBuffer, mimeType, traceId);
+
+        if (!recognition) {
+            liveAssistantLog(traceId, "Finalizando sem candidatos porque o AudD nao retornou titulo");
+            return { candidates: [] };
+        }
+
+        const churchMatches = await findChurchMusicMatches(churchId, recognition, traceId);
+        const candidates = [];
+
+        for (const match of churchMatches) {
+            const music = await this.returnMusic(match.id, churchId, eventId);
+            if (!music) {
+                liveAssistantLog(traceId, "Correspondencia ignorada porque returnMusic nao retornou musica", {
+                    musicId: match.id,
+                    score: match.score
+                });
+                continue;
+            }
+
+            candidates.push({
+                source: "church",
+                confidence: Math.min(0.99, recognition.confidence * (0.75 + (match.score * 0.25))),
+                music_id: music.id,
+                name: music.name,
+                artist: music.artist,
+                tone: detectedTone || music.tom || "",
+                cipher_title: music.cipher_title,
+                cipher_text: music.cipher_text
+            });
+        }
+
+        if (candidates.length > 0) {
+            liveAssistantLog(traceId, "Retornando candidatos da biblioteca da igreja", {
+                count: candidates.length,
+                candidates: candidates.map((candidate) => ({
+                    music_id: candidate.music_id,
+                    name: candidate.name,
+                    artist: candidate.artist,
+                    tone: candidate.tone,
+                    confidence: candidate.confidence
+                }))
+            });
+            return { candidates };
+        }
+
+        liveAssistantLog(traceId, "Nenhuma musica da igreja aceita; buscando cifra online", {
+            name: recognition.name,
+            artist: recognition.artist
+        });
+
+        const cipherOptions = await ciphers.scrapeCifraClub(recognition.name, recognition.artist);
+        const safeCipherOptions = Array.isArray(cipherOptions) ? cipherOptions : [];
+        liveAssistantLog(traceId, "Resultado da busca online de cifras", {
+            count: safeCipherOptions.length,
+            options: safeCipherOptions.slice(0, 5).map((option) => ({
+                title: option.title,
+                artist: option.artist,
+                href: option.href
+            }))
+        });
+
+        const firstCipher = safeCipherOptions[0];
+
+        if (!firstCipher) {
+            liveAssistantLog(traceId, "Finalizando sem candidatos porque nenhuma cifra online foi encontrada");
+            return { candidates: [] };
+        }
+
+        const cipher = await ciphers.scrapeCifraContent(firstCipher.href);
+        liveAssistantLog(traceId, "Cifra online carregada", {
+            title: cipher.title || recognition.name,
+            sourceUrl: cipher.sourceUrl,
+            textLength: cipher.text?.length || 0
+        });
+
+        return {
+            candidates: [{
+                source: "external",
+                temporary: true,
+                confidence: recognition.confidence,
+                name: recognition.name,
+                artist: recognition.artist,
+                tone: detectedTone || "",
+                cipher_title: cipher.title || recognition.name,
+                cipher_text: cipher.text,
+                cipher_url: cipher.sourceUrl
+            }]
+        };
+    },
     searchMusic: async function (name, artist) {
         const youtubeApiKey = getYoutubeApiKey();
 

@@ -41,6 +41,12 @@ module.exports = {
         id_igreja: id,
         event_id: Joi.number().integer().min(0).default(0)
     }),
+    liveAssistant: Joi.object({
+        id_igreja: id,
+        id_evento: Joi.number().integer().positive().required(),
+        current_music_id: Joi.number().integer().positive().optional(),
+        detected_tone: Joi.string().trim().max(12).allow("").default("")
+    }),
     createComment: Joi.object({
         id_igreja: id,
         id_musica: id,

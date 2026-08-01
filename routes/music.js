@@ -88,6 +88,19 @@ function uploadCipherPdf(req, res, next) {
     });
 }
 
+function uploadLiveAudio(req, res, next) {
+    const upload = uploadConfig.createLiveAudioUpload().single("audio_chunk");
+
+    upload(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+
+        const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+        return res.status(status).send(error.message || "Trecho de audio invalido");
+    });
+}
+
 router.post("/procurar", login, validateBody(schemas.search), async (req, res, next) => {
     if (!(await canUseMusicPermission(req, res, "music.create"))) {
         return;
@@ -177,6 +190,57 @@ router.post("/retorna_musica/:music_id", login, validateParams(schemas.musicPara
         return res.status(500).send(error);
     })
 })
+
+router.post("/assistente/identificar", login, uploadLiveAudio, validateBody(schemas.liveAssistant), async (req, res) => {
+    if (!(await canAccessChurchMusic(req, res))) {
+        return;
+    }
+
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).send("Trecho de audio nao enviado");
+    }
+
+    const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+    try {
+        console.log(`[LiveAssistant ${traceId}] Requisicao recebida: ${JSON.stringify({
+            userId: req.usuario?.id_usuario,
+            churchId: req.body.id_igreja,
+            eventId: req.body.id_evento,
+            currentMusicId: req.body.current_music_id || null,
+            detectedTone: req.body.detected_tone || "",
+            mimeType: req.file.mimetype,
+            bytes: req.file.buffer.length
+        })}`);
+
+        const events = await functions.executeSQL(
+            "SELECT id FROM eventos WHERE id = ? AND id_igreja = ?",
+            [req.body.id_evento, req.body.id_igreja]
+        );
+
+        if (events.length === 0) {
+            console.log(`[LiveAssistant ${traceId}] Evento nao encontrado para igreja`);
+            return res.status(404).send("Evento nao encontrado");
+        }
+
+        const result = await _musicService.identifyLiveMusic({
+            churchId: req.body.id_igreja,
+            eventId: req.body.id_evento,
+            audioBuffer: req.file.buffer,
+            mimeType: req.file.mimetype,
+            detectedTone: req.body.detected_tone,
+            traceId
+        });
+        console.log(`[LiveAssistant ${traceId}] Resposta final: ${JSON.stringify({
+            candidates: result.candidates?.length || 0,
+            sources: (result.candidates || []).map((candidate) => candidate.source)
+        })}`);
+        return res.status(200).send(functions.createResponse("Sugestoes do assistente ao vivo", result, "POST", 200));
+    } catch (error) {
+        console.error(`[LiveAssistant ${traceId}] Falha ao identificar trecho:`, error);
+        return res.status(error.status || 500).send(error.message || error);
+    }
+});
 
 router.post("/comentarios/criar", login, validateBody(schemas.createComment), async (req, res, next) => {
     if (!(await canAccessRequestedMusic(req, res))) {

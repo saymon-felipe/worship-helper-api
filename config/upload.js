@@ -6,6 +6,7 @@ const { randomUUID } = require('crypto');
 const bucket = process.env.S3_BUCKET || 'worship-helper-bucket';
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_CIPHER_PDF_SIZE = 5 * 1024 * 1024;
+const MAX_LIVE_AUDIO_SIZE = 3 * 1024 * 1024;
 const imageExtensions = {
     'image/jpeg': '.jpg',
     'image/png': '.png',
@@ -56,6 +57,17 @@ function pdfFileFilter(req, file, cb) {
     cb(error);
 }
 
+function liveAudioFileFilter(req, file, cb) {
+    if (String(file.mimetype || "").startsWith("audio/") || file.mimetype === "video/webm") {
+        cb(null, true);
+        return;
+    }
+
+    const error = new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname);
+    error.message = "Envie um trecho de audio valido";
+    cb(error);
+}
+
 function createImageUpload(pathResolver) {
     return multer({
         storage: multerS3({
@@ -92,6 +104,17 @@ function createCipherPdfUpload() {
     });
 }
 
+function createLiveAudioUpload() {
+    return multer({
+        storage: multer.memoryStorage(),
+        limits: {
+            fileSize: MAX_LIVE_AUDIO_SIZE,
+            files: 1
+        },
+        fileFilter: liveAudioFileFilter
+    });
+}
+
 async function streamToBuffer(stream) {
     const chunks = [];
     for await (const chunk of stream) {
@@ -119,8 +142,10 @@ async function deleteFiles(files) {
 module.exports = {
     MAX_IMAGE_SIZE,
     MAX_CIPHER_PDF_SIZE,
+    MAX_LIVE_AUDIO_SIZE,
     createImageUpload,
     createCipherPdfUpload,
+    createLiveAudioUpload,
     keyFromLocation,
     deleteFromS3: async (key) => s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })),
     deleteFiles,
