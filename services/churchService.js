@@ -891,6 +891,25 @@ let churchService = {
 
         await Promise.all(promises);
     },
+    deleteEvent: async function (event_id, company_id) {
+        const images = await functions.executeSQL(`
+            SELECT ice.s3_key
+            FROM imagens_comentarios_eventos ice
+            INNER JOIN comentarios_eventos ce ON ce.id = ice.id_comentario
+            WHERE ce.id_evento = ?
+        `, [event_id]);
+
+        const result = await functions.executeSQL(
+            "DELETE FROM eventos WHERE id = ? AND id_igreja = ?",
+            [event_id, company_id]
+        );
+
+        if (result.affectedRows <= 0) {
+            throw "Evento nao encontrado";
+        }
+
+        await Promise.all(images.map((image) => uploadConfig.deleteFromS3(image.s3_key).catch(() => null)));
+    },
     postEventComment: async function (message, user_id, event_id, parent_id = null, images = []) {
         if (message.length > 280) {
             throw "Mensagem e muito grande, limite de 280 caracteres";

@@ -557,6 +557,29 @@ router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventP
     })
 })
 
+router.post("/deletar-evento/:id_evento", login, validateParams(schemas.eventParams), validateBody(schemas.deleteEvent), async (req, res) => {
+    try {
+        const permission = await _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja);
+        if (!_permissions.hasPermission(permission, "events.delete")) {
+            return res.status(401).send("Acesso negado");
+        }
+    } catch (error) {
+        return res.status(401).send(error);
+    }
+
+    try {
+        await _churchService.deleteEvent(req.params.id_evento, req.body.id_igreja);
+        const response = functions.createResponse("Evento removido com sucesso", null, "POST", 200);
+        return res.status(200).send(response);
+    } catch (error) {
+        if (error === "Evento nao encontrado") {
+            return res.status(404).send(error);
+        }
+
+        return res.status(500).send(error);
+    }
+})
+
 router.post("/retorna-eventos", login, validateBody(schemas.churchId), (req, res, next) => {
     _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
         if (!permission.administrador && !permission.apenas_membro) {

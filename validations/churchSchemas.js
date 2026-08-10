@@ -101,6 +101,9 @@ module.exports = {
         event_members: Joi.array().items(eventMember).min(1).required(),
         event_musics: Joi.array().items(eventMusic).min(1).required()
     }),
+    deleteEvent: Joi.object({
+        id_igreja: id
+    }),
     eventParams: Joi.object({
         id_evento: id
     }),
