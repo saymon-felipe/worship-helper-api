@@ -59,18 +59,6 @@ function compressCipherText(text) {
     return zlib.gzipSync(Buffer.from(text, "utf8"));
 }
 
-function decompressCipherText(content, encoding) {
-    if (!content) {
-        return "";
-    }
-
-    if (encoding === "gzip") {
-        return zlib.gunzipSync(content).toString("utf8");
-    }
-
-    return Buffer.from(content).toString("utf8");
-}
-
 function createCipherVersion() {
     return `${Date.now().toString(36)}-${randomUUID()}`;
 }
@@ -278,11 +266,11 @@ let musicService = {
             `
                 INSERT INTO
                     musicas
-                    (id_igreja, nome_musica, artista_musica, video_url, cifra_url, cifra_titulo, cifra_conteudo, cifra_encoding, imagem, video_id)
+                    (id_igreja, nome_musica, artista_musica, video_url, cifra_url, cifra_titulo, imagem, video_id)
                 VALUES
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (?, ?, ?, ?, ?, ?, ?, ?)
             `,
-            [church_id, name, artist, video_url, cipherPayload.url, cipherPayload.title, "", "", thumbnail, videoId]
+            [church_id, name, artist, video_url, cipherPayload.url, cipherPayload.title, thumbnail, videoId]
         );
 
         let cipherUpload;
@@ -361,9 +349,9 @@ let musicService = {
                         return;
                     }
 
-                    results2[0].cipher_text = results[0].cifra_s3_key
-                        ? decompressCipherText(await uploadConfig.getCipher(results[0].cifra_s3_key), "gzip")
-                        : decompressCipherText(results[0].cifra_conteudo, results[0].cifra_encoding);
+                    results2[0].cipher_text = zlib.gunzipSync(
+                        await uploadConfig.getCipher(results[0].cifra_s3_key)
+                    ).toString("utf8");
                     results2[0].cipher_title = results[0].cifra_titulo || "";
                     results2[0].cipher_version = results[0].cifra_versao || "legacy";
                     resolve(results2[0]);
@@ -689,7 +677,7 @@ let musicService = {
         const { cipherKey, cipherVersion } = await writeCipherContent(church_id, music_id, cipher_text);
         try {
             await functions.executeSQL(
-                `UPDATE musicas SET cifra_s3_key = ?, cifra_versao = ?, cifra_conteudo = '', cifra_encoding = '' WHERE id_musica = ? AND id_igreja = ?`,
+                `UPDATE musicas SET cifra_s3_key = ?, cifra_versao = ? WHERE id_musica = ? AND id_igreja = ?`,
                 [cipherKey, cipherVersion, music_id, church_id]
             );
         } catch (error) {
@@ -702,33 +690,6 @@ let musicService = {
         }
         return { cipher_version: cipherVersion };
 
-        /* Legacy database storage kept here for migration history only.
-        return new Promise((resolve, reject) => {
-            const compressed = compressCipherText(cipher_text);
-            functions.executeSQL(
-                `
-                    UPDATE
-                        musicas
-                    SET
-                        cifra_conteudo = ?,
-                        cifra_encoding = 'gzip'
-                    WHERE
-                        id_musica = ?
-                    AND
-                        id_igreja = ?
-                `,
-                [compressed, music_id, church_id]
-            ).then((result) => {
-                if (result.affectedRows === 0) {
-                    reject(new Error("Música não encontrada"));
-                    return;
-                }
-                resolve({ id_aviso: results.insertId });
-            }).catch((error) => {
-                reject(error);
-            });
-        });
-        */
     },
     deleteMusic: async function (music_id, church_id) {
         const [music] = await functions.executeSQL(

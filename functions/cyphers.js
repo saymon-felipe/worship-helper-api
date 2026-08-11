@@ -39,6 +39,22 @@ function debugLog(label, payload) {
     }
 }
 
+function cifraExtractionLog(label, payload) {
+    console.info(`[Cyphers] ${label}`, payload);
+}
+
+function cifraPageContext(rawUrl) {
+    try {
+        const url = new URL(rawUrl);
+        return {
+            host: url.hostname,
+            path: url.pathname
+        };
+    } catch {
+        return { url: String(rawUrl || "") };
+    }
+}
+
 function truncateForLog(value = "", limit = TEXT_LOG_LIMIT) {
     const normalized = String(value).replace(/\s+/g, " ").trim();
     return normalized.length > limit ?`${normalized.slice(0, limit)}...` : normalized;
@@ -105,10 +121,19 @@ function decodeDuckDuckGoHref(rawHref = "") {
     }
 }
 
+function isPartituraUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return /(^|\/)partituras?(?:\/|$)/i.test(parsed.pathname);
+    } catch {
+        return false;
+    }
+}
+
 function isRelevantCifraUrl(url) {
     try {
         const parsed = new URL(url);
-        return parsed.hostname.includes("cifraclub.com.br");
+        return parsed.hostname.includes("cifraclub.com.br") && !isPartituraUrl(url);
     } catch {
         return false;
     }
@@ -194,19 +219,49 @@ function assertCifraClubUrl(url) {
 async function fetchCifraPageHtml(url) {
     assertCifraClubUrl(url);
 
-    const response = await fetch(url, {
-        headers: {
-            "user-agent": "Mozilla/5.0"
-        }
-    });
+    const page = cifraPageContext(url);
+    cifraExtractionLog("Iniciando download da página de cifra", page);
+
+    let response;
+
+    try {
+        response = await fetch(url, {
+            headers: {
+                "user-agent": "Mozilla/5.0"
+            }
+        });
+    } catch (error) {
+        cifraExtractionLog("Falha de rede ao baixar página de cifra", {
+            ...page,
+            message: error.message,
+            cause: error.cause && error.cause.message
+        });
+        throw error;
+    }
 
     if (!response.ok) {
+        cifraExtractionLog("Cifra Club respondeu com erro", {
+            ...page,
+            status: response.status,
+            statusText: response.statusText,
+            finalUrl: response.url
+        });
         const error = new Error(`Cifra Club page request failed with status ${response.status}`);
         error.status = response.status;
         throw error;
     }
 
-    return response.text();
+    const html = await response.text();
+
+    cifraExtractionLog("Página de cifra baixada", {
+        ...page,
+        status: response.status,
+        finalUrl: response.url,
+        contentType: response.headers.get("content-type"),
+        htmlLength: html.length
+    });
+
+    return html;
 }
 
 function extractCipherFromHtml(html) {
@@ -239,7 +294,10 @@ function extractCipherFromHtml(html) {
     if (bestCandidate) {
         return {
             title,
-            text: bestCandidate.text
+            text: bestCandidate.text,
+            extractionSource: bestCandidate.selector,
+            candidateCount: candidates.length,
+            lyricsLength: 0
         };
     }
 
@@ -248,13 +306,27 @@ function extractCipherFromHtml(html) {
     if (lyricsText.length > 40) {
         return {
             title,
-            text: lyricsText
+            text: lyricsText,
+            extractionSource: ".letra",
+            candidateCount: candidates.length,
+            lyricsLength: lyricsText.length
         };
     }
 
     return {
         title,
-        text: ""
+        text: "",
+        extractionSource: null,
+        candidateCount: candidates.length,
+        lyricsLength: lyricsText.length,
+        selectorMatches: {
+            cifraPre: $(".cifra_cnt pre").length,
+            classCifraPre: $("[class*='cifra'] pre").length,
+            dataCy: $("[data-cy='cifra-content']").length,
+            pre: $("pre").length,
+            article: $("article").length,
+            lyrics: $(".letra").length
+        }
     };
 }
 
@@ -268,7 +340,7 @@ function scoreCandidate(candidate, keywords) {
         }
     }
 
-    if (/\/tabs-|\/partituras\/|\/cifra\//.test(candidate.href)) {
+    if (/\/tabs-|\/cifra\//.test(candidate.href)) {
         score += 2;
     }
 
@@ -612,20 +684,47 @@ let cyphers = {
         return rerankWithOpenAI(candidates, name, artist);
     },
     scrapeCifraContent: async function (url) {
-        const html = await fetchCifraPageHtml(url);
-        const cipher = extractCipherFromHtml(html);
+        const page = cifraPageContext(url);
 
-        if (!cipher.text) {
-            const error = new Error("Não foi possível extrair o conteúdo da cifra");
-            error.status = 422;
+        try {
+            const html = await fetchCifraPageHtml(url);
+            const cipher = extractCipherFromHtml(html);
+
+            if (!cipher.text) {
+                cifraExtractionLog("Conteúdo de cifra não encontrado na página", {
+                    ...page,
+                    title: cipher.title,
+                    htmlLength: html.length,
+                    candidateCount: cipher.candidateCount,
+                    lyricsLength: cipher.lyricsLength,
+                    selectorMatches: cipher.selectorMatches
+                });
+                const error = new Error("Não foi possível extrair o conteúdo da cifra");
+                error.status = 422;
+                throw error;
+            }
+
+            cifraExtractionLog("Cifra extraída com sucesso", {
+                ...page,
+                title: cipher.title,
+                extractionSource: cipher.extractionSource,
+                candidateCount: cipher.candidateCount,
+                contentLength: cipher.text.length
+            });
+
+            return {
+                sourceUrl: url,
+                title: cipher.title,
+                text: cipher.text
+            };
+        } catch (error) {
+            cifraExtractionLog("Extração de cifra falhou", {
+                ...page,
+                status: error.status || null,
+                message: error.message
+            });
             throw error;
         }
-
-        return {
-            sourceUrl: url,
-            title: cipher.title,
-            text: cipher.text
-        };
     }
 }
 
