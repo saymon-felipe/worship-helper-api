@@ -182,51 +182,50 @@ let functions = {
                 }
             })
 
-            let promises = [];
-            let musicsTags = [];
-    
-            for (let i = 0; i < musicList.length; i++) {
-                promises.push(
-                    functions.executeSQL(
-                        `
-                            SELECT
-                                tm.tag_id_musica,
-                                tm.id_tag_referencia,
-                                ltm.nome_tag
-                            FROM
-                                tags_de_musicas tm
-                            INNER JOIN
-                                lista_tags_musicas ltm
-                            ON
-                                ltm.id_tag_musicas = tm.id_tag_referencia
-                            WHERE
-                                tag_id_musica = ?
-                        `, [musicList[i].id]
-                    ).then((results) => {
-                        musicsTags.push(results);
-                    })
-                )
+            if (musicList.length === 0) {
+                resolve(musicList);
+                return;
             }
-    
-            Promise.all(promises).then(() => {
-                for (let i = 0; i < musicList.length; i++) {
-                    for (let j = 0; j < musicsTags.length; j++) {
-                        if (musicsTags[j].length > 0 && musicsTags[j][0].tag_id_musica == musicList[i].id) {
-                            let tags = musicsTags[j].map(tag => {
-                                return {
-                                    id: tag.id_tag_referencia,
-                                    nome: tag.nome_tag
-                                }
-                            })
-                            musicList[i].tags = tags;
-                        }
-                    }
-                }
+
+            const musicIds = musicList.map((music) => music.id);
+            const placeholders = musicIds.map(() => "?").join(", ");
+
+            functions.executeSQL(
+                `
+                    SELECT
+                        tm.tag_id_musica,
+                        tm.id_tag_referencia,
+                        ltm.nome_tag
+                    FROM
+                        tags_de_musicas tm
+                    INNER JOIN
+                        lista_tags_musicas ltm
+                    ON
+                        ltm.id_tag_musicas = tm.id_tag_referencia
+                    WHERE
+                        tm.tag_id_musica IN (${placeholders})
+                `,
+                musicIds
+            ).then((results) => {
+                const tagsByMusicId = new Map();
+
+                results.forEach((tag) => {
+                    const tags = tagsByMusicId.get(tag.tag_id_musica) || [];
+                    tags.push({
+                        id: tag.id_tag_referencia,
+                        nome: tag.nome_tag
+                    });
+                    tagsByMusicId.set(tag.tag_id_musica, tags);
+                });
+
+                musicList.forEach((music) => {
+                    music.tags = tagsByMusicId.get(music.id) || [];
+                });
 
                 resolve(musicList);
             }).catch((error) => {
                 reject(error);
-            })
+            });
         })
     },
     dateToDB: function (date) {
