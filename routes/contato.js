@@ -9,6 +9,7 @@ const nodemailer = require('nodemailer');
 const createAdminContactHtml = require('../templates/adminContact');
 const createUserFeedbackHtml = require('../templates/userFeedback');
 const functions = require('../functions/functions');
+const emailService = require('../services/emailService');
 
 router.post('/solicitar-demonstracao', async (req, res, next) => {
     const { name, phone, email, teamSize } = req.body;
@@ -56,20 +57,20 @@ router.post('/solicitar-demonstracao', async (req, res, next) => {
             });
 
             // Send to Admin
-            await transporter.sendMail({
+            await emailService.deliver(transporter, {
                 from: `"Worship Helper Leads" <${smtpUser}>`,
                 to: adminEmail,
                 subject: `Novo Lead de Demo: ${name} (${teamSize})`,
                 html: adminHtml
-            });
+            }, { template: 'lead_demo_admin' });
 
             // Send to User
-            await transporter.sendMail({
+            await emailService.deliver(transporter, {
                 from: `"Worship Helper" <${smtpUser}>`,
                 to: email,
                 subject: 'Recebemos seu pedido de demonstração!',
                 html: userHtml
-            });
+            }, { template: 'lead_demo_usuario' });
 
             console.log(`[SMTP API] Emails sent successfully for ${email}`);
             return res.status(200).send({ success: true, method: 'smtp' });

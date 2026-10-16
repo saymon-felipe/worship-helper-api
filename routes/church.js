@@ -389,7 +389,8 @@ router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res
         }
 
         _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario, req.body.email_usuario, req.body.id_funcao, permission).then((invite) => {
-            let response = functions.createResponse("Convite enviado", invite, "POST", 200);
+            const message = invite.email_enviado === false ? "Convite criado, mas não foi possível enviar o e-mail" : "Convite enviado";
+            let response = functions.createResponse(message, invite, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
             return res.status(_churchService.errorStatus(error)).send(error);

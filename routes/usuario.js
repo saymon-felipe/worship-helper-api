@@ -81,6 +81,7 @@ router.post("/esqueci-senha", validateBody(schemas.requestPasswordReset), async 
         );
         return res.status(200).send(response);
     } catch (error) {
+        console.error("[USUARIO] Falha ao enviar e-mail de redefinição de senha:", error);
         return res.status(500).send({ error: "Não foi possível enviar o e-mail de redefinição. Tente novamente." });
     }
 });

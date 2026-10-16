@@ -722,6 +722,9 @@ let churchService = {
             nome_funcao: invitedFunction ? invitedFunction.nome_funcao : null
         };
 
+        // O convite ja esta salvo; o e-mail e um aviso. Falha nele nao desfaz o convite, mas o resultado vai junto na resposta.
+        invite.email_enviado = false;
+
         // Fetch church name and inviter name to send the email
         try {
             const [churchInfo, inviterInfo] = await Promise.all([
@@ -747,8 +750,11 @@ let churchService = {
                     churchName,
                     inviterName,
                     existingUser,
-                    roleName: invitedFunction ? invitedFunction.nome_funcao : null
+                    roleName: invitedFunction ? invitedFunction.nome_funcao : null,
+                    churchId: company_id,
+                    inviteId: invite.id
                 });
+                invite.email_enviado = true;
                 console.log(`[CHURCH_SERVICE] Disparo concluído com sucesso para: ${targetEmail}`);
             } else {
                 console.warn(`[CHURCH_SERVICE] Nenhum email encontrado para o convite (id_usuario: ${requestedUserId})`);
@@ -773,7 +779,14 @@ let churchService = {
                     fi.nome_funcao,
                     u.nome_usuario,
                     u.email_usuario,
-                    u.imagem_usuario
+                    u.imagem_usuario,
+                    (
+                        SELECT e.status
+                        FROM emails_enviados e
+                        WHERE e.id_convite = cmi.id
+                        ORDER BY e.id DESC
+                        LIMIT 1
+                    ) AS email_status
                 FROM
                     convites_membros_igreja cmi
                 LEFT JOIN
@@ -805,6 +818,8 @@ let churchService = {
                 id_funcao: invite.id_funcao_igreja,
                 nome_funcao: invite.nome_funcao,
                 pode_editar: churchService.canEditInvite(permission, requesting_user_id, invite.id_usuario_requisitante),
+                // null = convite anterior ao registro de e-mails (sem informacao)
+                email_enviado: invite.email_status ? invite.email_status === "enviado" : null,
                 data_criacao: invite.data_criacao
             };
         });
