@@ -48,7 +48,7 @@ function getApiUrl() {
     return (process.env.URL_API || "http://localhost:3000").replace(/\/$/, "");
 }
 
-async function sendChurchInvite({ to, churchName, inviterName, existingUser = false }) {
+async function sendChurchInvite({ to, churchName, inviterName, existingUser = false, roleName = null }) {
     console.log(`[EMAIL_SERVICE] Iniciando envio de convite para: ${to}`);
     const transportConfig = getTransportConfig();
 
@@ -72,9 +72,9 @@ async function sendChurchInvite({ to, churchName, inviterName, existingUser = fa
             to,
             subject: `Convite para participar da igreja ${churchName}`,
             html: existingUser
-                ? createExistingUserInviteHtml({ churchName, inviterName, loginUrl: inviteUrl, apiUrl: getApiUrl() })
-                : createInviteHtml({ churchName, inviterName, inviteUrl, apiUrl: getApiUrl() }),
-            text: `${inviterName} convidou você para participar da igreja ${churchName} no Worship Helper. Crie sua conta: ${inviteUrl}`
+                ? createExistingUserInviteHtml({ churchName, inviterName, loginUrl: inviteUrl, apiUrl: getApiUrl(), roleName })
+                : createInviteHtml({ churchName, inviterName, inviteUrl, apiUrl: getApiUrl(), roleName }),
+            text: `${inviterName} convidou você para participar da igreja ${churchName}${roleName ? ` como ${roleName}` : ""} no Worship Helper. Crie sua conta: ${inviteUrl}`
         });
 
         console.log(`[EMAIL_SERVICE] E-mail enviado com sucesso! MessageID: ${info.messageId}`);

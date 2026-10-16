@@ -497,10 +497,130 @@ let churchService = {
 
         await Promise.all(images.map((image) => uploadConfig.deleteFromS3(image.s3_key).catch(() => null)));
     },
-    sendInvite: async function (company_id, user_id, requesting_user_id, email_usuario = "") {
+    ROLE_ABOVE_PERMISSION_ERROR: "Voce nao pode atribuir ou alterar cargos com mais permissoes do que as suas",
+    INVITE_EDIT_FORBIDDEN_ERROR: "Apenas administradores ou quem enviou o convite podem edita-lo",
+    MEMBER_NOT_FOUND_ERROR: "Membro nao encontrado",
+    // Status HTTP dos erros de regra de negocio de cargos e convites; o restante segue como 500
+    errorStatus: function (error) {
+        if (error === churchService.ROLE_ABOVE_PERMISSION_ERROR || error === churchService.INVITE_EDIT_FORBIDDEN_ERROR) {
+            return 403;
+        }
+
+        if (error === "Funcao nao encontrada" || error === "Convite nao encontrado" || error === churchService.MEMBER_NOT_FOUND_ERROR) {
+            return 404;
+        }
+
+        return 500;
+    },
+    findFunction: async function (company_id, function_id) {
+        const [churchFunction] = await functions.executeSQL(
+            `
+                SELECT
+                    id_funcoes_igreja,
+                    nome_funcao,
+                    permissoes
+                FROM
+                    funcoes_igreja
+                WHERE
+                    id_funcoes_igreja = ?
+                AND
+                    id_funcoes_igreja_id_igreja = ?
+            `,
+            [function_id, company_id]
+        );
+
+        if (!churchFunction) {
+            throw "Funcao nao encontrada";
+        }
+
+        return churchFunction;
+    },
+    // Ninguem atribui, cria ou altera um cargo com permissoes alem das que ja tem. Administradores (responsavel da igreja,
+    // administrador do app) e quem ja tem todas as permissoes naturalmente podem qualquer cargo.
+    canAssignFunction: function (permission, churchFunction) {
+        return _permissions.canGrantPermissions(permission, churchFunction.permissoes);
+    },
+    assertCanGrantPermissions: function (permission, rolePermissions) {
+        if (!_permissions.canGrantPermissions(permission, rolePermissions)) {
+            throw churchService.ROLE_ABOVE_PERMISSION_ERROR;
+        }
+    },
+    // Editar ou excluir um cargo afeta quem o tem: so vale para cargos dentro do seu nivel, e as novas permissoes tambem
+    assertCanManageFunction: async function (permission, company_id, function_id, newPermissions) {
+        const currentFunction = await churchService.findFunction(company_id, function_id);
+
+        churchService.assertCanGrantPermissions(permission, currentFunction.permissoes);
+
+        if (newPermissions !== undefined) {
+            churchService.assertCanGrantPermissions(permission, newPermissions);
+        }
+    },
+    // Trocar os cargos de um membro: os cargos adicionados ou removidos precisam estar dentro do seu nivel
+    // (manter um cargo acima do seu nao e mudanca) e todos precisam ser desta igreja.
+    assertCanChangeMemberFunctions: async function (permission, company_id, user_id, new_function_ids) {
+        await _permissions.isMember(user_id, company_id).catch(() => {
+            throw churchService.MEMBER_NOT_FOUND_ERROR;
+        });
+
+        const churchFunctions = await churchService.returnFunctions(company_id);
+        const functionsById = new Map(churchFunctions.map((churchFunction) => [Number(churchFunction.id_funcao), churchFunction]));
+        const requested = new Set(new_function_ids.map(Number));
+
+        if ([...requested].some((function_id) => !functionsById.has(function_id))) {
+            throw "Funcao nao encontrada";
+        }
+
+        const currentRows = await functions.executeSQL(
+            `
+                SELECT
+                    id_funcoes_referencia
+                FROM
+                    funcoes_usuario
+                WHERE
+                    id_funcoes_igreja_id_igreja = ?
+                AND
+                    id_funcoes_igreja_id_usuario = ?
+            `,
+            [company_id, user_id]
+        );
+        const current = new Set(currentRows.map((row) => Number(row.id_funcoes_referencia)));
+
+        const changed = [
+            ...[...requested].filter((function_id) => !current.has(function_id)),
+            ...[...current].filter((function_id) => !requested.has(function_id))
+        ];
+
+        changed.forEach((function_id) => {
+            const churchFunction = functionsById.get(function_id);
+
+            if (churchFunction && !churchService.canAssignFunction(permission, churchFunction)) {
+                throw churchService.ROLE_ABOVE_PERMISSION_ERROR;
+            }
+        });
+    },
+    returnAssignableFunctions: async function (company_id, permission) {
+        const churchFunctions = await churchService.returnFunctions(company_id);
+
+        return churchFunctions.map((churchFunction) => {
+            return {
+                ...churchFunction,
+                atribuivel: churchService.canAssignFunction(permission, churchFunction)
+            };
+        });
+    },
+    sendInvite: async function (company_id, user_id, requesting_user_id, email_usuario = "", function_id = null, permission = null) {
         const normalizedEmail = String(email_usuario || "").trim().toLowerCase();
         let requestedUserId = user_id ? Number(user_id) : null;
         let existingUser = Boolean(requestedUserId);
+        let invitedFunction = null;
+
+        if (function_id) {
+            invitedFunction = await churchService.findFunction(company_id, function_id);
+
+            if (!churchService.canAssignFunction(permission, invitedFunction)) {
+                throw churchService.ROLE_ABOVE_PERMISSION_ERROR;
+            }
+        }
 
         if (!requestedUserId && normalizedEmail) {
             const [user] = await functions.executeSQL(
@@ -561,18 +681,24 @@ let churchService = {
             `
                 INSERT INTO
                     convites_membros_igreja
-                    (id_igreja, id_usuario_requisitado, email_usuario_requisitado, id_usuario_requisitante)
+                    (id_igreja, id_usuario_requisitado, email_usuario_requisitado, id_usuario_requisitante, id_funcao_igreja)
                 VALUES
-                    (?, ?, ?, ?)
+                    (?, ?, ?, ?, ?)
             `,
-            [company_id, requestedUserId, requestedUserId ? null : normalizedEmail, requesting_user_id]
+            [company_id, requestedUserId, requestedUserId ? null : normalizedEmail, requesting_user_id, invitedFunction ? invitedFunction.id_funcoes_igreja : null]
         );
 
         if (results.affectedRows <= 0) {
             throw "Ocorreu um erro ao enviar o convite";
         }
 
-        const invite = { id: results.insertId, id_usuario: requestedUserId, email_usuario: normalizedEmail };
+        const invite = {
+            id: results.insertId,
+            id_usuario: requestedUserId,
+            email_usuario: normalizedEmail,
+            id_funcao: invitedFunction ? invitedFunction.id_funcoes_igreja : null,
+            nome_funcao: invitedFunction ? invitedFunction.nome_funcao : null
+        };
 
         // Fetch church name and inviter name to send the email
         try {
@@ -598,7 +724,8 @@ let churchService = {
                     to: targetEmail,
                     churchName,
                     inviterName,
-                    existingUser
+                    existingUser,
+                    roleName: invitedFunction ? invitedFunction.nome_funcao : null
                 });
                 console.log(`[CHURCH_SERVICE] Disparo concluído com sucesso para: ${targetEmail}`);
             } else {
@@ -611,14 +738,17 @@ let churchService = {
 
         return invite;
     },
-    returnPendingInvites: async function (company_id) {
+    returnPendingInvites: async function (company_id, requesting_user_id = null, permission = null) {
         const results = await functions.executeSQL(
             `
                 SELECT
                     cmi.id,
                     cmi.id_usuario_requisitado,
+                    cmi.id_usuario_requisitante,
                     cmi.email_usuario_requisitado,
                     cmi.data_criacao,
+                    cmi.id_funcao_igreja,
+                    fi.nome_funcao,
                     u.nome_usuario,
                     u.email_usuario,
                     u.imagem_usuario
@@ -628,6 +758,10 @@ let churchService = {
                     usuario u
                 ON
                     u.id_usuario = cmi.id_usuario_requisitado
+                LEFT JOIN
+                    funcoes_igreja fi
+                ON
+                    fi.id_funcoes_igreja = cmi.id_funcao_igreja
                 WHERE
                     cmi.id_igreja = ?
                 AND
@@ -646,9 +780,84 @@ let churchService = {
                 email_usuario: invite.email_usuario || invite.email_usuario_requisitado,
                 imagem_usuario: invite.imagem_usuario,
                 cadastrado: Boolean(invite.id_usuario_requisitado),
+                id_funcao: invite.id_funcao_igreja,
+                nome_funcao: invite.nome_funcao,
+                pode_editar: churchService.canEditInvite(permission, requesting_user_id, invite.id_usuario_requisitante),
                 data_criacao: invite.data_criacao
             };
         });
+    },
+    canEditInvite: function (permission, requesting_user_id, inviter_id) {
+        if (!permission) {
+            return false;
+        }
+
+        return Boolean(permission.administrador) || Number(inviter_id) === Number(requesting_user_id);
+    },
+    editInvite: async function (company_id, invite_id, function_id, requesting_user_id, permission) {
+        const [invite] = await functions.executeSQL(
+            `
+                SELECT
+                    id,
+                    id_usuario_requisitante,
+                    id_funcao_igreja
+                FROM
+                    convites_membros_igreja
+                WHERE
+                    id = ?
+                AND
+                    id_igreja = ?
+                AND
+                    data_confirmacao IS NULL
+            `,
+            [invite_id, company_id]
+        );
+
+        if (!invite) {
+            throw "Convite nao encontrado";
+        }
+
+        if (!churchService.canEditInvite(permission, requesting_user_id, invite.id_usuario_requisitante)) {
+            throw churchService.INVITE_EDIT_FORBIDDEN_ERROR;
+        }
+
+        let newFunction = null;
+
+        if (function_id) {
+            newFunction = await churchService.findFunction(company_id, function_id);
+
+            // Manter o cargo que ja esta no convite nao e uma atribuicao nova, entao nao passa pela checagem de nivel
+            const isUnchanged = Number(invite.id_funcao_igreja) === Number(function_id);
+            if (!isUnchanged && !churchService.canAssignFunction(permission, newFunction)) {
+                throw churchService.ROLE_ABOVE_PERMISSION_ERROR;
+            }
+        }
+
+        const results = await functions.executeSQL(
+            `
+                UPDATE
+                    convites_membros_igreja
+                SET
+                    id_funcao_igreja = ?
+                WHERE
+                    id = ?
+                AND
+                    id_igreja = ?
+                AND
+                    data_confirmacao IS NULL
+            `,
+            [newFunction ? newFunction.id_funcoes_igreja : null, invite_id, company_id]
+        );
+
+        if (results.affectedRows <= 0) {
+            throw "Convite nao encontrado";
+        }
+
+        return {
+            id: invite.id,
+            id_funcao: newFunction ? newFunction.id_funcoes_igreja : null,
+            nome_funcao: newFunction ? newFunction.nome_funcao : null
+        };
     },
     deleteInvite: async function (company_id, invite_id) {
         const results = await functions.executeSQL(
@@ -706,22 +915,34 @@ let churchService = {
             })
         })
     },
-    removeMember: function (company_id, user_id) {
-        return new Promise((resolve, reject) => {
-            functions.executeSQL(`
-                DELETE FROM
-                    membros_igreja
-                WHERE
-                    id_igreja = ?
-                AND
-                    id_usuario = ?`,
-            [company_id, user_id])
-            .then(() => {
-                resolve();
-            }).catch((error) => {
-                reject(error);
-            })
-        })
+    removeMember: async function (company_id, user_id) {
+        // Cargos e tag primeiro: se algo falhar no meio, o membro perde o que tinha em vez de manter resquicios de quem saiu
+        await functions.executeSQL(`
+            DELETE FROM
+                funcoes_usuario
+            WHERE
+                id_funcoes_igreja_id_igreja = ?
+            AND
+                id_funcoes_igreja_id_usuario = ?`,
+        [company_id, user_id]);
+
+        await functions.executeSQL(`
+            DELETE FROM
+                tags_usuario
+            WHERE
+                tags_usuario_id_igreja = ?
+            AND
+                tags_usuario_id_usuario = ?`,
+        [company_id, user_id]);
+
+        await functions.executeSQL(`
+            DELETE FROM
+                membros_igreja
+            WHERE
+                id_igreja = ?
+            AND
+                id_usuario = ?`,
+        [company_id, user_id]);
     },
     createChurch: function (company_name, administrator_id, church_image) {
         return new Promise((resolve, reject) => {

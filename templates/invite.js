@@ -12,10 +12,13 @@ const escapeHtml = (value = "") => {
         .replace(/'/g, "&#039;");
 };
 
-module.exports = function createInviteHtml({ churchName, inviterName, inviteUrl, apiUrl }) {
+module.exports = function createInviteHtml({ churchName, inviterName, inviteUrl, apiUrl, roleName = null }) {
     const safeChurchName = escapeHtml(churchName);
     const safeInviterName = escapeHtml(inviterName);
     const safeInviteUrl = escapeHtml(inviteUrl);
+    const roleHtml = roleName
+        ? ` Você entrará com o cargo <strong>${escapeHtml(roleName)}</strong>.`
+        : "";
 
     return `
         <div style="background-color:#0b0a1a;padding:40px 20px;font-family:'Outfit', 'Inter', Arial, sans-serif;color:#ffffff;text-align:center;">
@@ -33,7 +36,7 @@ module.exports = function createInviteHtml({ churchName, inviterName, inviteUrl,
 
                 <!-- Message Body -->
                 <p style="font-size:15px;line-height:1.6;color:#d1d5db;margin-bottom:20px;text-align:center;">
-                    Olá! O líder <strong>${safeInviterName}</strong> convidou você para fazer parte da igreja <strong>${safeChurchName}</strong> no Worship Helper.
+                    Olá! O líder <strong>${safeInviterName}</strong> convidou você para fazer parte da igreja <strong>${safeChurchName}</strong> no Worship Helper.${roleHtml}
                 </p>
 
                 <!-- Instruction / Action -->

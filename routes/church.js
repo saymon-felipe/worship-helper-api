@@ -134,11 +134,14 @@ router.post("/criar-funcao", login, validateBody(schemas.churchFunction), (req, 
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createFunction(req.body.id_igreja, req.body.nome, req.body.permissoes).then((churchFunction) => {
+        Promise.resolve().then(() => {
+            _churchService.assertCanGrantPermissions(permission, req.body.permissoes);
+            return _churchService.createFunction(req.body.id_igreja, req.body.nome, req.body.permissoes);
+        }).then((churchFunction) => {
             let response = functions.createResponse("Função criada com sucesso", churchFunction, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
-            return res.status(500).send(error);
+            return res.status(_churchService.errorStatus(error)).send(error);
         })
     }).catch((error) => {
         return res.status(401).send(error);
@@ -151,11 +154,13 @@ router.post("/atualizar-funcao", login, validateBody(schemas.updateChurchFunctio
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.updateFunction(req.body.id_function, req.body.id_igreja, req.body.nome, req.body.permissoes).then((churchFunction) => {
+        _churchService.assertCanManageFunction(permission, req.body.id_igreja, req.body.id_function, req.body.permissoes).then(() => {
+            return _churchService.updateFunction(req.body.id_function, req.body.id_igreja, req.body.nome, req.body.permissoes);
+        }).then((churchFunction) => {
             let response = functions.createResponse("Funcao atualizada com sucesso", churchFunction, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
-            return res.status(500).send(error);
+            return res.status(_churchService.errorStatus(error)).send(error);
         })
     }).catch((error) => {
         return res.status(401).send(error);
@@ -168,11 +173,13 @@ router.post("/deletar-funcao", login, validateBody(schemas.deleteFunction), (req
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.deleteFunction(req.body.id_function, req.body.id_igreja).then(() => {
+        _churchService.assertCanManageFunction(permission, req.body.id_igreja, req.body.id_function).then(() => {
+            return _churchService.deleteFunction(req.body.id_function, req.body.id_igreja);
+        }).then(() => {
             let response = functions.createResponse("Função removida com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
-            return res.status(500).send(error);
+            return res.status(_churchService.errorStatus(error)).send(error);
         })
     }).catch((error) => {
         return res.status(401).send(error);
@@ -370,12 +377,47 @@ router.post("/envia-convite", login, validateBody(schemas.sendInvite), (req, res
         if (!_permissions.hasPermission(permission, "members.invite")) {
             return res.status(401).send("Acesso negado");
         }
-        
-        _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario, req.body.email_usuario).then((invite) => {
+
+        _churchService.sendInvite(req.body.id_igreja, req.body.id_usuario, req.usuario.id_usuario, req.body.email_usuario, req.body.id_funcao, permission).then((invite) => {
             let response = functions.createResponse("Convite enviado", invite, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
+            return res.status(_churchService.errorStatus(error)).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+// Lista os cargos da igreja marcando quais a pessoa pode atribuir (para convites e para trocar cargos de membros)
+router.post("/retorna-funcoes-atribuiveis", login, validateBody(schemas.churchId), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!_permissions.hasPermission(permission, "members.invite") && !_permissions.hasPermission(permission, "members.roles")) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.returnAssignableFunctions(req.body.id_igreja, permission).then((results) => {
+            let response = functions.createResponse("Retorno dos cargos com indicacao de quais podem ser atribuidos", results, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
             return res.status(500).send(error);
+        })
+    }).catch((error) => {
+        return res.status(401).send(error);
+    })
+})
+
+router.post("/editar-convite", login, validateBody(schemas.editInvite), (req, res, next) => {
+    _permissions.checkPermission(req.usuario.id_usuario, req.body.id_igreja).then((permission) => {
+        if (!_permissions.hasPermission(permission, "members.invite")) {
+            return res.status(401).send("Acesso negado");
+        }
+
+        _churchService.editInvite(req.body.id_igreja, req.body.id_convite, req.body.id_funcao, req.usuario.id_usuario, permission).then((invite) => {
+            let response = functions.createResponse("Convite atualizado com sucesso", invite, "POST", 200);
+            return res.status(200).send(response);
+        }).catch((error) => {
+            return res.status(_churchService.errorStatus(error)).send(error);
         })
     }).catch((error) => {
         return res.status(401).send(error);
@@ -388,7 +430,7 @@ router.post("/retorna-convites-pendentes", login, validateBody(schemas.churchId)
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.returnPendingInvites(req.body.id_igreja).then((results) => {
+        _churchService.returnPendingInvites(req.body.id_igreja, req.usuario.id_usuario, permission).then((results) => {
             let response = functions.createResponse("Retorno dos convites pendentes", results, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {

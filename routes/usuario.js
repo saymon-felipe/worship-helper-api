@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const login = require("../middleware/login");
 const _usuarioService = require("../services/usuarioService");
+const _churchService = require("../services/churchService");
 const uploadConfig = require("../config/upload.js");
 const functions = require("../functions/functions.js");
 const _permissions = require("../functions/permissions.js");
@@ -220,11 +221,13 @@ router.post("/altera-funcoes", login, validateBody(schemas.changeFunctions), (re
             return res.status(401).send("Acesso negado");
         }
 
-        _usuarioService.newFunctions(req.body.id_usuario, req.body.id_igreja, req.body.new_functions).then(() => {
+        _churchService.assertCanChangeMemberFunctions(permission, req.body.id_igreja, req.body.id_usuario, req.body.new_functions).then(() => {
+            return _usuarioService.newFunctions(req.body.id_usuario, req.body.id_igreja, req.body.new_functions);
+        }).then(() => {
             let response = functions.createResponse("Funções adicionadas com sucesso", null, "POST", 200);
             return res.status(200).send(response);
         }).catch((error) => {
-            return res.status(500).send(error);
+            return res.status(_churchService.errorStatus(error)).send(error);
         })
     }).catch((error) => {
         return res.status(401).send(error);

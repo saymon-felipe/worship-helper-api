@@ -76,8 +76,14 @@ module.exports = {
     sendInvite: Joi.object({
         id_igreja: id,
         id_usuario: Joi.number().integer().positive().optional().allow(null),
-        email_usuario: Joi.string().trim().email().max(100).optional().allow("")
+        email_usuario: Joi.string().trim().email().max(100).optional().allow(""),
+        id_funcao: Joi.number().integer().positive().optional().allow(null)
     }).or("id_usuario", "email_usuario"),
+    editInvite: Joi.object({
+        id_igreja: id,
+        id_convite: id,
+        id_funcao: Joi.number().integer().positive().allow(null).required()
+    }),
     deleteInvite: Joi.object({
         id_igreja: id,
         id_convite: id

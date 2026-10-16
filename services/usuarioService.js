@@ -302,7 +302,8 @@ let usuarioService = {
             `
                 SELECT
                     id,
-                    id_usuario_requisitante
+                    id_usuario_requisitante,
+                    id_funcao_igreja
                 FROM
                     convites_membros_igreja
                 WHERE
@@ -321,6 +322,26 @@ let usuarioService = {
         }
 
         await _churchService.addMember(company_id, user_id);
+
+        if (invites[0].id_funcao_igreja) {
+            // O SELECT garante que a funcao ainda existe e pertence a esta igreja; INSERT IGNORE evita duplicar um vinculo ja existente
+            await functions.executeSQL(
+                `
+                    INSERT IGNORE INTO
+                        funcoes_usuario
+                        (id_funcoes_igreja_id_igreja, id_funcoes_igreja_id_usuario, id_funcoes_referencia)
+                    SELECT
+                        ?, ?, id_funcoes_igreja
+                    FROM
+                        funcoes_igreja
+                    WHERE
+                        id_funcoes_igreja = ?
+                    AND
+                        id_funcoes_igreja_id_igreja = ?
+                `,
+                [company_id, user_id, invites[0].id_funcao_igreja, company_id]
+            );
+        }
 
         await functions.executeSQL(
             `
@@ -342,13 +363,18 @@ let usuarioService = {
                 `
                     SELECT
                         cmi.*,
-                        i.*
+                        i.*,
+                        fi.nome_funcao
                     FROM
                         convites_membros_igreja cmi
                     INNER JOIN
                         igreja i
                     ON
                         i.id_igreja = cmi.id_igreja
+                    LEFT JOIN
+                        funcoes_igreja fi
+                    ON
+                        fi.id_funcoes_igreja = cmi.id_funcao_igreja
                     WHERE
                         cmi.id_usuario_requisitado = ?
                     AND
@@ -363,7 +389,8 @@ let usuarioService = {
                     return {
                         id_igreja: invite.id_igreja,
                         nome_igreja: invite.nome_igreja,
-                        imagem_igreja: invite.imagem_igreja
+                        imagem_igreja: invite.imagem_igreja,
+                        nome_funcao: invite.nome_funcao
                     }
                 })
 
@@ -490,42 +517,29 @@ let usuarioService = {
             })
         })
     },
-    newFunctions: function (user_id, company_id, new_functions) {
-        return new Promise((resolve, reject) => {
-            functions.executeSQL(`
-                DELETE FROM
-                    funcoes_usuario
-                WHERE
-                    id_funcoes_igreja_id_usuario = ?
-                AND 
-                    id_funcoes_igreja_id_igreja = ?
-            `, [user_id, company_id])
-            .then(() => {
-                if (new_functions.length == 0) {
-                    resolve();
-                }
+    newFunctions: async function (user_id, company_id, new_functions) {
+        await functions.executeSQL(`
+            DELETE FROM
+                funcoes_usuario
+            WHERE
+                id_funcoes_igreja_id_usuario = ?
+            AND
+                id_funcoes_igreja_id_igreja = ?
+        `, [user_id, company_id]);
 
-                for (let i = 0; i < new_functions.length; i++) {
-                    functions.executeSQL(`
-                        INSERT INTO
-                            funcoes_usuario
-                            (id_funcoes_igreja_id_igreja, id_funcoes_igreja_id_usuario, id_funcoes_referencia)
-                        VALUES
-                            (?, ?, ?)
-                    `, [company_id, user_id, new_functions[i]])
-                    .then(() => {
-                        if (i == new_functions.length - 1) {
-                            resolve();
-                        }
-                    }).catch((error2) => {
-                        reject(error2);
-                    })
-                } 
-            })
-            .catch((error) => {
-                reject(error);
-            })
-        })
+        const uniqueFunctions = [...new Set(new_functions.map(Number))];
+        if (uniqueFunctions.length == 0) {
+            return;
+        }
+
+        // Uma unica instrucao aguardada: antes cada cargo era um INSERT solto e a promise resolvia ao terminar so o ultimo
+        await functions.executeSQL(`
+            INSERT INTO
+                funcoes_usuario
+                (id_funcoes_igreja_id_igreja, id_funcoes_igreja_id_usuario, id_funcoes_referencia)
+            VALUES
+                ?
+        `, [uniqueFunctions.map((function_id) => [company_id, user_id, function_id])]);
     },
     issueTokenForUser: async function (user_id) {
         const users = await functions.executeSQL("SELECT * FROM usuario WHERE id_usuario = ?", [user_id]);

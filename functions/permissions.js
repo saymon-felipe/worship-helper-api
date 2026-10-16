@@ -81,6 +81,22 @@ let permissions = {
         const parent = getPermissionParent(permissionKey);
         return !parent || permissions.includes(parent);
     },
+    // Verdadeiro quando quem tem `permissionObj` ja possui TODAS as permissoes listadas em `rolePermissions`,
+    // ou seja, o cargo nao da nada alem do que a pessoa ja pode. Administradores (responsavel da igreja,
+    // administrador do app) podem tudo, e quem tem um cargo com todas as permissoes passa naturalmente.
+    // Nao ignora filhos "orfaos": as permissoes de uma pessoa sao a uniao de todos os cargos dela, entao um filho
+    // sem pai neste cargo pode se tornar efetivo junto com outro cargo.
+    canGrantPermissions: function (permissionObj, rolePermissions) {
+        if (!permissionObj) {
+            return false;
+        }
+
+        if (permissionObj.administrador) {
+            return true;
+        }
+
+        return parsePermissions(rolePermissions).every((permissionKey) => this.hasPermission(permissionObj, permissionKey));
+    },
     requirePermission: async function (id_usuario, id_igreja, permissionKey) {
         const permission = await this.checkPermission(id_usuario, id_igreja);
         if (!this.hasPermission(permission, permissionKey)) {

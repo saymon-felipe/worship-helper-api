@@ -7,10 +7,13 @@ const escapeHtml = (value = "") => {
         .replace(/'/g, "&#039;");
 };
 
-module.exports = function createExistingUserInviteHtml({ churchName, inviterName, loginUrl, apiUrl }) {
+module.exports = function createExistingUserInviteHtml({ churchName, inviterName, loginUrl, apiUrl, roleName = null }) {
     const safeChurchName = escapeHtml(churchName);
     const safeInviterName = escapeHtml(inviterName);
     const safeLoginUrl = escapeHtml(loginUrl);
+    const roleHtml = roleName
+        ? ` Voce entrara com o cargo <strong>${escapeHtml(roleName)}</strong>.`
+        : "";
 
     return `
         <div style="background-color:#0b0a1a;padding:40px 20px;font-family:'Outfit', 'Inter', Arial, sans-serif;color:#ffffff;text-align:center;">
@@ -20,7 +23,7 @@ module.exports = function createExistingUserInviteHtml({ churchName, inviterName
                     <div style="height:2px;background:linear-gradient(90deg, transparent, #38b6ff, transparent);width:100px;margin:12px auto 0;"></div>
                 </div>
                 <h2 style="font-size:20px;font-weight:700;margin-top:0;margin-bottom:16px;color:#ffffff;text-align:center;">Voce recebeu um convite</h2>
-                <p style="font-size:15px;line-height:1.6;color:#d1d5db;margin-bottom:20px;text-align:center;">Ola! <strong>${safeInviterName}</strong> convidou voce para fazer parte da igreja <strong>${safeChurchName}</strong> no Worship Helper.</p>
+                <p style="font-size:15px;line-height:1.6;color:#d1d5db;margin-bottom:20px;text-align:center;">Ola! <strong>${safeInviterName}</strong> convidou voce para fazer parte da igreja <strong>${safeChurchName}</strong> no Worship Helper.${roleHtml}</p>
                 <div style="background:rgba(255, 255, 255, 0.03);border:1px solid rgba(255, 255, 255, 0.05);border-radius:12px;padding:18px;margin-bottom:28px;text-align:center;">
                     <p style="font-size:14px;line-height:1.5;color:#9ca3af;margin:0 0 16px;">Entre na sua conta para visualizar e aceitar o convite.</p>
                     <a href="${safeLoginUrl}" style="display:inline-block;background:#38b6ff;color:#0b0a1a;text-decoration:none;padding:12px 28px;border-radius:30px;font-weight:700;font-size:15px;box-shadow:0 4px 15px rgba(56, 182, 255, 0.3);">Entrar no Worship Helper</a>
