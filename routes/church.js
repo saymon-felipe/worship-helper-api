@@ -18,6 +18,16 @@ async function isEventPast(eventId) {
     return eventDate < new Date();
 }
 
+// Monta o local do evento a partir do payload ja validado (o Joi descarta tudo isso quando tem_local nao e true).
+function eventLocationFromBody(body) {
+    return {
+        local: body.local_evento,
+        cep: body.cep_evento,
+        latitude: body.latitude_evento,
+        longitude: body.longitude_evento
+    };
+}
+
 function isPastEventDate(eventDate) {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(eventDate || ""));
     if (!match) {
@@ -553,7 +563,7 @@ router.post("/cadastrar-evento", login, validateBody(schemas.createEvent), (req,
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(async (event) => {
+        _churchService.createEvent(req.usuario.id_usuario, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics, req.body.tem_local ? eventLocationFromBody(req.body) : null).then(async (event) => {
             _pushNotificationService.notifyEventCreated({
                 eventId: event.id_evento,
                 churchId: req.body.id_igreja,
@@ -587,7 +597,10 @@ router.post("/atualizar-evento/:id_evento", login, validateParams(schemas.eventP
             return res.status(401).send("Acesso negado");
         }
 
-        _churchService.updateEvent(req.params.id_evento, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics).then(async () => {
+        // tem_local ausente (cliente antigo) = mantem o local atual; desmarcado = remove; marcado = grava o local validado.
+        const eventLocation = req.body.tem_local === undefined ? undefined : (req.body.tem_local ? eventLocationFromBody(req.body) : null);
+
+        _churchService.updateEvent(req.params.id_evento, req.body.id_igreja, req.body.event_date, req.body.event_name, req.body.event_members, req.body.event_musics, eventLocation).then(async () => {
             const updatedEvent = await _churchService.returnEvent(req.params.id_evento, req.body.id_igreja);
             let response = functions.createResponse("Evento atualizado com sucesso", updatedEvent, "POST", 200);
             return res.status(200).send(response);

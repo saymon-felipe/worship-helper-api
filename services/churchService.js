@@ -21,6 +21,28 @@ async function attachImages(items, table, foreignKey) {
     return items.map((item) => ({ ...item, imagens: byParent.get(item.id_aviso) || [] }));
 }
 
+// O local do evento e opcional: { local, cep, latitude, longitude } vira as colunas do banco, com NULL no que nao veio
+// (a regra "obrigatorio com o switch marcado" fica no Joi, em churchSchemas.createEvent). Sem texto de local nao ha CEP nem
+// pino, e as coordenadas so valem as duas juntas.
+function normalizeEventLocation(location) {
+    const source = location || {};
+    const local = typeof source.local === "string" && source.local.trim() !== "" ? source.local.trim() : null;
+    if (local === null) {
+        return { local: null, cep: null, latitude: null, longitude: null };
+    }
+
+    const cepDigits = typeof source.cep === "string" ? source.cep.replace(/\D/g, "") : "";
+    const isCoordinate = (value) => typeof value === "number" && Number.isFinite(value);
+    const hasPin = isCoordinate(source.latitude) && isCoordinate(source.longitude);
+
+    return {
+        local,
+        cep: cepDigits.length === 8 ? cepDigits : null,
+        latitude: hasPin ? source.latitude : null,
+        longitude: hasPin ? source.longitude : null
+    };
+}
+
 let churchService = {
     returnChurches: function () {
         return new Promise((resolve, reject) => {
@@ -981,7 +1003,10 @@ let churchService = {
             })
         })
     },
-    createEvent: function (creator_id, company_id, event_date, event_name, event_members, event_musics) {
+    // event_location: { local, cep, latitude, longitude } ou null (evento sem local).
+    createEvent: function (creator_id, company_id, event_date, event_name, event_members, event_musics, event_location = null) {
+        const location = normalizeEventLocation(event_location);
+
         return new Promise((resolve, reject) => {
             if (event_name.trim() == "" || event_members.length == 0 || event_musics.length == 0) {
                 reject("Parâmetros incorretos");
@@ -995,10 +1020,10 @@ let churchService = {
                 `
                     INSERT INTO
                         eventos
-                        (id_igreja, nome, data_inicio, id_criador)
+                        (id_igreja, nome, data_inicio, id_criador, local_evento, cep_evento, latitude_evento, longitude_evento)
                     VALUES
-                        (?, ?, ?, ?)
-                `, [company_id, event_name, functions.dateToDB(event_date), creator_id]
+                        (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [company_id, event_name, functions.dateToDB(event_date), creator_id, location.local, location.cep, location.latitude, location.longitude]
             ).then((results) => {
                 let promises = [];
 
@@ -1047,10 +1072,14 @@ let churchService = {
             })
         })
     },
-    updateEvent: async function (event_id, company_id, event_date, event_name, event_members, event_musics) {
+    // event_location: objeto { local, cep, latitude, longitude } = define o local, null = remove o local, undefined = mantem o atual.
+    updateEvent: async function (event_id, company_id, event_date, event_name, event_members, event_musics, event_location = undefined) {
         if (event_name.length > 15) {
             throw "Nome muito grande, limite 15 caracteres";
         }
+
+        const updateLocation = event_location !== undefined ? 1 : 0;
+        const location = normalizeEventLocation(event_location);
 
         const updateResult = await functions.executeSQL(
             `
@@ -1058,13 +1087,26 @@ let churchService = {
                     eventos
                 SET
                     nome = ?,
-                    data_inicio = ?
+                    data_inicio = ?,
+                    local_evento = IF(?, ?, local_evento),
+                    cep_evento = IF(?, ?, cep_evento),
+                    latitude_evento = IF(?, ?, latitude_evento),
+                    longitude_evento = IF(?, ?, longitude_evento)
                 WHERE
                     id = ?
                 AND
                     id_igreja = ?
             `,
-            [event_name, functions.dateToDB(event_date), event_id, company_id]
+            [
+                event_name,
+                functions.dateToDB(event_date),
+                updateLocation, location.local,
+                updateLocation, location.cep,
+                updateLocation, location.latitude,
+                updateLocation, location.longitude,
+                event_id,
+                company_id
+            ]
         );
 
         if (updateResult.affectedRows <= 0) {
@@ -1242,6 +1284,7 @@ let churchService = {
                         e.id_criador,
                         e.nome AS nome_evento,
                         e.data_inicio AS data_inicio_evento,
+                        e.local_evento,
                         (
                             SELECT
                                 ti.nome_tag
@@ -1314,6 +1357,10 @@ let churchService = {
                     e.id_criador,
                     e.nome AS nome_evento,
                     e.data_inicio AS data_inicio_evento,
+                    e.local_evento,
+                    e.cep_evento,
+                    e.latitude_evento,
+                    e.longitude_evento,
                     (
                         SELECT
                             ti.nome_tag
