@@ -62,5 +62,8 @@ module.exports = {
     }),
     pushUnsubscribe: Joi.object({
         endpoint: Joi.string().uri().required()
+    }),
+    pushTest: Joi.object({
+        endpoint: Joi.string().uri().required()
     })
 };

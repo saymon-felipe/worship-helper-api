@@ -271,7 +271,15 @@ router.post("/push/subscription", login, validateBody(schemas.pushSubscription),
         const response = functions.createResponse("Notificacoes ativadas neste dispositivo", null, "POST", 200);
         return res.status(200).send(response);
     }).catch((error) => {
-        return res.status(500).send({ error: error.message || error });
+        return res.status(error.status || 500).send({ error: error.message || error });
+    })
+})
+router.post("/push/test", login, validateBody(schemas.pushTest), (req, res, next) => {
+    _pushNotificationService.sendConfirmation(req.usuario.id_usuario, req.body.endpoint).then(() => {
+        const response = functions.createResponse("Notificacao de confirmacao enviada", null, "POST", 200);
+        return res.status(200).send(response);
+    }).catch((error) => {
+        return res.status(error.status || 500).send({ error: error.message || error });
     })
 })
 router.post("/push/unsubscribe", login, validateBody(schemas.pushUnsubscribe), (req, res, next) => {
